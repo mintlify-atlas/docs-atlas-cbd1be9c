@@ -1,0 +1,125 @@
+{
+  "projectType": "saas",
+  "projectName": "Invoice Generator",
+  "projectDescription": "A minimal invoice generator for freelancers and small businesses built with Next.js and shadcn/ui",
+  "theme": "mint",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/invoices",
+              "features/customers",
+              "features/templates",
+              "features/pdf-export",
+              "features/email-delivery"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/creating-invoices",
+              "guides/managing-customers",
+              "guides/company-setup",
+              "guides/payment-details",
+              "guides/currencies"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment",
+              "configuration/database",
+              "configuration/authentication",
+              "configuration/email"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/invoices",
+              "api/customers",
+              "api/templates",
+              "api/pdf",
+              "api/email"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/invoice",
+              "api/types/customer",
+              "api/types/template"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment",
+        "groups": [
+          {
+            "group": "Deploy",
+            "pages": [
+              "deployment/overview",
+              "deployment/vercel",
+              "deployment/self-hosted",
+              "deployment/environment-variables"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Create and manage professional invoices",
+    "Customer address book management",
+    "Reusable invoice templates",
+    "PDF generation and export",
+    "Email delivery integration",
+    "Multi-currency support (11 currencies)",
+    "Invoice status tracking (draft, sent, paid, cancelled)",
+    "Company profile and branding",
+    "Payment details management",
+    "Authentication with Google OAuth and credentials",
+    "Dark mode support"
+  ],
+  "publicApiSurface": [
+    "GET /api/invoices - Fetch all invoices",
+    "POST /api/invoices - Create a new invoice",
+    "GET /api/invoices/[id] - Get invoice by ID",
+    "PUT /api/invoices/[id] - Update invoice",
+    "DELETE /api/invoices/[id] - Delete invoice",
+    "POST /api/pdf - Generate PDF from invoice",
+    "POST /api/email - Send invoice via email",
+    "GET /api/templates - Fetch all templates",
+    "POST /api/templates - Create a new template",
+    "POST /api/auth/register - Register new user",
+    "NextAuth endpoints - /api/auth/[...nextauth]"
+  ]
+}
