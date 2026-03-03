@@ -75,7 +75,10 @@
             "pages": [
               "api/types/invoice",
               "api/types/customer",
-              "api/types/template"
+              "api/types/template",
+              "api/types/company",
+              "api/types/account",
+              "api/types/summary"
             ]
           }
         ]
@@ -113,7 +116,7 @@
     "GET /api/invoices - Fetch all invoices",
     "POST /api/invoices - Create a new invoice",
     "GET /api/invoices/[id] - Get invoice by ID",
-    "PUT /api/invoices/[id] - Update invoice",
+    "PATCH /api/invoices/[id] - Update invoice",
     "DELETE /api/invoices/[id] - Delete invoice",
     "POST /api/pdf - Generate PDF from invoice",
     "POST /api/email - Send invoice via email",

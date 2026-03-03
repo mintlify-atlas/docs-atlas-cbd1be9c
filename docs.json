@@ -87,7 +87,10 @@
             "pages": [
               "api/types/invoice",
               "api/types/customer",
-              "api/types/template"
+              "api/types/template",
+              "api/types/company",
+              "api/types/account",
+              "api/types/summary"
             ]
           }
         ]

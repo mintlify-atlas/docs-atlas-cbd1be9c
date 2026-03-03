@@ -1,0 +1,162 @@
+---
+title: AccountDetails
+description: Bank account and payment information
+---
+
+## AccountDetails
+
+The `AccountDetails` interface represents bank account information for receiving invoice payments.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the account
+</ResponseField>
+
+<ResponseField name="accountHolderName" type="string" required>
+  Name on the bank account
+</ResponseField>
+
+<ResponseField name="bankName" type="string" required>
+  Name of the financial institution
+</ResponseField>
+
+<ResponseField name="accountNumber" type="string" required>
+  Bank account number
+</ResponseField>
+
+<ResponseField name="sortCode" type="string">
+  UK bank sort code (e.g., 12-34-56)
+</ResponseField>
+
+<ResponseField name="routingNumber" type="string">
+  US bank routing number (ABA number)
+</ResponseField>
+
+<ResponseField name="iban" type="string">
+  International Bank Account Number for international transfers
+</ResponseField>
+
+<ResponseField name="swiftBic" type="string">
+  SWIFT/BIC code for international transfers
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Account currency (e.g., GBP, USD, EUR)
+</ResponseField>
+
+<ResponseField name="paymentReference" type="string">
+  Optional payment reference or memo instructions
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  Additional payment instructions or notes
+</ResponseField>
+
+<ResponseField name="isDefault" type="boolean" required>
+  Whether this is the default payment account
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp when the account was added
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  ISO 8601 timestamp when the account was last updated
+</ResponseField>
+
+## TypeScript definition
+
+From `app/lib/types.ts:64-79`:
+
+```typescript
+export interface AccountDetails {
+  id: string;
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  sortCode?: string;
+  routingNumber?: string;
+  iban?: string;
+  swiftBic?: string;
+  currency?: string;
+  paymentReference?: string;
+  notes?: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## Example - UK account
+
+```json
+{
+  "id": "acc_uk123",
+  "accountHolderName": "Acme Design Studio Ltd",
+  "bankName": "Barclays Bank",
+  "accountNumber": "12345678",
+  "sortCode": "20-00-00",
+  "currency": "GBP",
+  "paymentReference": "Invoice payment",
+  "isDefault": true,
+  "createdAt": "2026-01-10T09:00:00Z",
+  "updatedAt": "2026-01-10T09:00:00Z"
+}
+```
+
+## Example - US account
+
+```json
+{
+  "id": "acc_us456",
+  "accountHolderName": "Acme Design Studio LLC",
+  "bankName": "Chase Bank",
+  "accountNumber": "987654321",
+  "routingNumber": "021000021",
+  "currency": "USD",
+  "isDefault": false,
+  "createdAt": "2026-01-15T10:30:00Z",
+  "updatedAt": "2026-02-01T14:20:00Z"
+}
+```
+
+## Example - International account
+
+```json
+{
+  "id": "acc_eu789",
+  "accountHolderName": "Acme Design Studio GmbH",
+  "bankName": "Deutsche Bank",
+  "accountNumber": "DE89370400440532013000",
+  "iban": "DE89370400440532013000",
+  "swiftBic": "DEUTDEFF",
+  "currency": "EUR",
+  "notes": "For international wire transfers, use SWIFT/BIC code",
+  "isDefault": false,
+  "createdAt": "2026-02-01T11:00:00Z",
+  "updatedAt": "2026-02-01T11:00:00Z"
+}
+```
+
+## Usage
+
+Account details are included on invoice PDFs to tell customers how to pay. Managed through the account settings page (`/account`).
+
+```typescript
+import type { AccountDetails } from '@/app/lib/types';
+
+const account: AccountDetails = {
+  id: crypto.randomUUID(),
+  accountHolderName: 'My Business LLC',
+  bankName: 'Wells Fargo',
+  accountNumber: '1234567890',
+  routingNumber: '121000248',
+  currency: 'USD',
+  isDefault: true,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
+};
+```
+
+<Warning>
+  Store sensitive banking information securely. Consider encrypting account details at rest.
+</Warning>

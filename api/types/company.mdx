@@ -1,0 +1,141 @@
+---
+title: CompanyDetails
+description: Company profile and branding information
+---
+
+## CompanyDetails
+
+The `CompanyDetails` interface represents your company's profile information that appears on invoices.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the company profile
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Company or business name
+</ResponseField>
+
+<ResponseField name="email" type="string" required>
+  Company contact email address
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  Company phone number
+</ResponseField>
+
+<ResponseField name="address" type="string" required>
+  Street address
+</ResponseField>
+
+<ResponseField name="city" type="string" required>
+  City
+</ResponseField>
+
+<ResponseField name="state" type="string" required>
+  State or province
+</ResponseField>
+
+<ResponseField name="zipCode" type="string" required>
+  Postal or ZIP code
+</ResponseField>
+
+<ResponseField name="country" type="string" required>
+  Country name
+</ResponseField>
+
+<ResponseField name="website" type="string">
+  Company website URL
+</ResponseField>
+
+<ResponseField name="taxId" type="string">
+  Tax identification number (VAT, EIN, etc.)
+</ResponseField>
+
+<ResponseField name="logo" type="string">
+  Base64-encoded company logo image
+</ResponseField>
+
+<ResponseField name="isDefault" type="boolean" required>
+  Whether this is the default company profile
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp when the profile was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  ISO 8601 timestamp when the profile was last updated
+</ResponseField>
+
+## TypeScript definition
+
+From `app/lib/types.ts:87-103`:
+
+```typescript
+export interface CompanyDetails {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  website?: string;
+  taxId?: string;
+  logo?: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## Example
+
+```json
+{
+  "id": "comp_abc123",
+  "name": "Acme Design Studio",
+  "email": "hello@acmestudio.com",
+  "phone": "+1 (555) 123-4567",
+  "address": "123 Design Ave",
+  "city": "San Francisco",
+  "state": "CA",
+  "zipCode": "94102",
+  "country": "United States",
+  "website": "https://acmestudio.com",
+  "taxId": "12-3456789",
+  "logo": "data:image/png;base64,...",
+  "isDefault": true,
+  "createdAt": "2026-01-15T10:30:00Z",
+  "updatedAt": "2026-03-01T14:20:00Z"
+}
+```
+
+## Usage
+
+Company details are displayed on invoices and can be managed through the company settings page (`/company`).
+
+```typescript
+import type { CompanyDetails } from '@/app/lib/types';
+
+// Create a company profile
+const company: CompanyDetails = {
+  id: crypto.randomUUID(),
+  name: 'My Business',
+  email: 'contact@mybusiness.com',
+  address: '456 Business Rd',
+  city: 'Austin',
+  state: 'TX',
+  zipCode: '78701',
+  country: 'United States',
+  isDefault: true,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
+};
+```
+
+<Note>
+  Multiple company profiles can be created, but only one can be marked as default at a time.
+</Note>

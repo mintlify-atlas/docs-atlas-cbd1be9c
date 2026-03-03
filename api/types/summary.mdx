@@ -1,0 +1,149 @@
+---
+title: InvoiceSummary
+description: Invoice calculation totals and summary
+---
+
+## InvoiceSummary
+
+The `InvoiceSummary` interface represents the calculated totals for an invoice, including subtotals, discounts, tax, and final total.
+
+<ResponseField name="subtotal" type="number" required>
+  Sum of all line items before discounts and tax (quantity × rate)
+</ResponseField>
+
+<ResponseField name="itemDiscount" type="number" required>
+  Total amount of item-level discounts applied
+</ResponseField>
+
+<ResponseField name="subtotalAfterDiscount" type="number" required>
+  Subtotal minus item discounts, before tax
+</ResponseField>
+
+<ResponseField name="taxAmount" type="number" required>
+  Total tax amount calculated on the discounted subtotal
+</ResponseField>
+
+<ResponseField name="total" type="number" required>
+  Final invoice total (subtotalAfterDiscount + taxAmount)
+</ResponseField>
+
+## TypeScript definition
+
+From `app/lib/types.ts:56-62`:
+
+```typescript
+export interface InvoiceSummary {
+  subtotal: number;
+  itemDiscount: number;
+  subtotalAfterDiscount: number;
+  taxAmount: number;
+  total: number;
+}
+```
+
+## Calculation logic
+
+The summary is calculated using the `calculateInvoiceSummary` function from `app/lib/invoice.ts`:
+
+```typescript
+export function calculateInvoiceSummary(
+  items: InvoiceItem[],
+  globalTaxRate: number = 0,
+): InvoiceSummary {
+  let subtotal = 0;
+  let itemDiscount = 0;
+  let taxAmount = 0;
+
+  // Calculate subtotal and item-level discounts
+  for (const item of items) {
+    const qty = item.quantity || 0;
+    const rate = item.rate || 0;
+    const itemTotal = qty * rate;
+    const discount = item.discount ? (itemTotal * item.discount) / 100 : 0;
+    const itemTaxBase = itemTotal - discount;
+
+    subtotal += itemTotal;
+    itemDiscount += discount;
+
+    // Apply item-level tax rate if provided, otherwise use global rate
+    const taxRate = item.taxRate ?? globalTaxRate;
+    taxAmount += (itemTaxBase * taxRate) / 100;
+  }
+
+  const subtotalAfterDiscount = subtotal - itemDiscount;
+  const total = subtotalAfterDiscount + taxAmount;
+
+  return {
+    subtotal,
+    itemDiscount,
+    subtotalAfterDiscount,
+    taxAmount,
+    total,
+  };
+}
+```
+
+## Example
+
+Given these invoice items:
+
+```typescript
+const items: InvoiceItem[] = [
+  {
+    id: 'item_1',
+    description: 'Web Design',
+    quantity: 10,
+    rate: 100,
+    discount: 10, // 10% discount
+    taxRate: 20   // 20% VAT
+  },
+  {
+    id: 'item_2',
+    description: 'Hosting',
+    quantity: 1,
+    rate: 50,
+    taxRate: 20
+  }
+];
+
+const summary = calculateInvoiceSummary(items);
+```
+
+The resulting summary would be:
+
+```json
+{
+  "subtotal": 1050.00,
+  "itemDiscount": 100.00,
+  "subtotalAfterDiscount": 950.00,
+  "taxAmount": 190.00,
+  "total": 1140.00
+}
+```
+
+**Breakdown:**
+- Item 1: (10 × £100) = £1000, minus 10% (£100) = £900 + 20% VAT (£180) = £1080
+- Item 2: (1 × £50) = £50 + 20% VAT (£10) = £60
+- **Total: £1140**
+
+## Usage in components
+
+```typescript
+import { calculateInvoiceSummary } from '@/app/lib/invoice';
+import type { InvoiceSummary, InvoiceItem } from '@/app/lib/types';
+
+// Calculate summary for display
+const items: InvoiceItem[] = [/* ... */];
+const globalTaxRate = 20; // 20% VAT
+
+const summary: InvoiceSummary = calculateInvoiceSummary(items, globalTaxRate);
+
+console.log(`Subtotal: ${summary.subtotal}`);
+console.log(`Discount: -${summary.itemDiscount}`);
+console.log(`Tax: ${summary.taxAmount}`);
+console.log(`Total: ${summary.total}`);
+```
+
+<Info>
+  The tax calculation applies to the discounted amount, not the original subtotal. Item-level tax rates take precedence over the global invoice tax rate.
+</Info>
