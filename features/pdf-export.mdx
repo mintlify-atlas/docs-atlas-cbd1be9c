@@ -1,0 +1,337 @@
+---
+title: PDF generation and export
+description: Generate professional PDF invoices with company branding and payment details
+---
+
+## Overview
+
+The PDF export feature converts your invoices into professional, print-ready PDF documents that can be downloaded, printed, or shared with clients. PDFs are generated entirely in the browser using html2pdf.js, ensuring your invoice data never leaves your device.
+
+## Generating PDFs
+
+From any invoice detail page (`/invoices/[id]`), click the **Download PDF** button to generate and download a PDF file named `Invoice_{invoiceNumber}.pdf`.
+
+The generation process:
+
+1. Retrieves your default company details and bank account information
+2. Generates HTML markup with inline CSS styling
+3. Converts HTML to PDF using html2pdf.js
+4. Automatically downloads the file to your device
+
+<Note>
+PDF generation happens entirely in your browser. No data is sent to external servers, ensuring complete privacy.
+</Note>
+
+## PDF structure
+
+The generated PDF includes:
+
+### Header section
+
+**Left side:**
+- "INVOICE" heading in large text
+- Invoice number (e.g., Invoice #INV-123456789)
+- Invoice date
+- Due date
+
+**Right side:**
+- Company logo (if configured)
+- Company name
+- Contact email
+- Phone number (if configured)
+- Full address with city, state, ZIP
+- Country
+- Tax ID (if configured)
+
+### Bill To section
+
+Customer information:
+- Customer name (bold)
+- Email address
+- Street address
+- City, state, ZIP code
+- Country
+
+### Line items table
+
+A structured table with columns:
+- **Description**: Item or service name
+- **Quantity**: Number of units (right-aligned)
+- **Rate**: Price per unit (right-aligned, formatted with currency)
+- **Amount**: Total for line (right-aligned, formatted with currency)
+
+Calculation: `Amount = Quantity × Rate`
+
+### Totals section
+
+- **Subtotal**: Sum of all line item amounts
+- **Tax**: If tax rate > 0, shows "Tax (X%)" with calculated amount
+- **Total**: Final amount due (bold, larger font)
+
+All amounts are formatted using the invoice's currency.
+
+### Notes section
+
+Optional section displaying invoice notes if provided. Notes are rendered with line breaks preserved.
+
+### Payment details section
+
+If you've configured a default bank account, the PDF includes:
+
+- Account holder name
+- Bank name
+- Account number
+- Sort code (if provided)
+- Routing number (if provided)
+- IBAN (if provided)
+- SWIFT/BIC code (if provided)
+- Currency (if provided)
+- Payment reference (if provided)
+- Additional notes (if provided)
+
+### Footer
+
+A simple centered message:
+> Thank you for patronizing us!
+
+## HTML generation
+
+The PDF is generated from HTML with embedded CSS. The main function from `app/lib/pdf.ts:12`:
+
+```typescript
+export function generateInvoiceHTML(
+  invoice: Invoice,
+  company?: CompanyDetails,
+  account?: AccountDetails,
+): string
+```
+
+This function:
+1. Calculates totals (subtotal, tax, total)
+2. Builds HTML string with inline styles
+3. Conditionally includes company and account information
+4. Formats all currency values and dates
+
+### Styling highlights
+
+- **Font**: System font stack for universal compatibility
+- **Colors**: Black text on white background for print clarity
+- **Layout**: Flexbox and grid for consistent alignment
+- **Typography**: Clear hierarchy with font sizes from 11px to 28px
+- **Borders**: Subtle gray borders (1px solid #ddd) for sections
+- **Tables**: Striped rows with hover effects (not visible in PDF)
+
+## PDF download
+
+The download function from `app/lib/pdf.ts:344`:
+
+```typescript
+export async function downloadInvoicePDF(
+  invoice: Invoice,
+  company?: CompanyDetails,
+  account?: AccountDetails,
+): Promise<void> {
+  // Dynamically import html2pdf to ensure it's loaded client-side
+  const html2pdf = (await import("html2pdf.js")).default;
+
+  const htmlContent = generateInvoiceHTML(invoice, company, account);
+
+  const options = {
+    margin: [10, 10, 10, 10] as [number, number, number, number],
+    filename: `Invoice_${invoice.invoiceNumber}.pdf`,
+    image: { type: "png" as const, quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" as const },
+  };
+
+  try {
+    const element = document.createElement("div");
+    element.innerHTML = htmlContent;
+    await html2pdf().set(options).from(element).save();
+  } catch (error) {
+    console.error("PDF generation failed:", error);
+    throw new Error("Failed to generate PDF");
+  }
+}
+```
+
+### PDF options explained
+
+- **margin**: 10mm on all sides (top, right, bottom, left)
+- **filename**: Dynamic based on invoice number
+- **image.type**: PNG format for embedded images
+- **image.quality**: 0.98 (near-perfect quality)
+- **html2canvas.scale**: 2× for high-resolution rendering
+- **jsPDF.format**: A4 paper size (210mm × 297mm)
+- **jsPDF.orientation**: Portrait mode
+
+<Tip>
+For best results, ensure your company logo is a reasonable size (under 500KB) and uses a web-friendly format like PNG or SVG.
+</Tip>
+
+## Company details integration
+
+To include your company information on PDFs:
+
+1. Navigate to Settings (if available) or configure via your application
+2. Add your company details:
+   - Company name
+   - Email and phone
+   - Full address
+   - Logo (uploaded as image file)
+   - Tax ID or VAT number
+3. Mark as default company
+4. All future PDFs will include this information
+
+The company details structure:
+
+```typescript
+interface CompanyDetails {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  website?: string;
+  taxId?: string;
+  logo?: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## Bank account integration
+
+To include payment instructions on PDFs:
+
+1. Navigate to Settings and add a bank account
+2. Provide:
+   - Account holder name
+   - Bank name
+   - Account number
+   - Regional details (sort code, routing number, IBAN, SWIFT/BIC)
+   - Optional payment reference
+3. Mark as default account
+4. All future PDFs will include payment details
+
+The account details structure:
+
+```typescript
+interface AccountDetails {
+  id: string;
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  sortCode?: string;
+  routingNumber?: string;
+  iban?: string;
+  swiftBic?: string;
+  currency?: string;
+  paymentReference?: string;
+  notes?: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## Currency formatting
+
+All monetary amounts in the PDF are formatted using the `formatCurrency()` function from `app/lib/invoice.ts:50`:
+
+```typescript
+export function formatCurrency(
+  amount: number,
+  currency: string = "USD",
+): string {
+  if (isNaN(amount)) {
+    return `$0.00`;
+  }
+
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch (error) {
+    // Fallback if currency is invalid
+    return `${amount.toFixed(2)} ${currency}`;
+  }
+}
+```
+
+This ensures:
+- Proper currency symbols (€, £, $, etc.)
+- Correct decimal separators for locale
+- Consistent 2 decimal places
+- Fallback for unsupported currencies
+
+## Date formatting
+
+Dates are formatted using `formatDate()` with the "long" format:
+
+```typescript
+export function formatDate(
+  dateString: string,
+  format: "short" | "long" = "short",
+): string {
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+
+  if (format === "short") {
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } else {
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  }
+}
+```
+
+Example output: "January 15, 2026"
+
+## Print optimization
+
+The PDF includes print-specific CSS:
+
+```css
+@media print {
+  body { background: white; }
+  .container { padding: 0; }
+}
+```
+
+This ensures the PDF prints correctly if opened in a browser before downloading.
+
+<Info>
+The generated PDF is optimized for both digital viewing and physical printing. Colors are print-safe and the layout fits standard A4 paper.
+</Info>
+
+## Error handling
+
+If PDF generation fails:
+- An error alert displays: "Failed to download PDF. Please try again."
+- The error is logged to browser console for debugging
+- The button returns to its normal state (no longer showing "Generating PDF...")
+
+Common causes:
+- Very large company logos (>5MB)
+- Browser compatibility issues
+- Insufficient memory on device
+
+<Warning>
+PDF generation is resource-intensive. On older devices or browsers, generation may take 5-10 seconds. The button shows "Generating PDF..." during this time.
+</Warning>

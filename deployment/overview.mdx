@@ -1,0 +1,142 @@
+---
+title: Deployment overview
+description: Learn how to deploy Invoice Generator to production environments
+---
+
+Invoice Generator is a Next.js 16 application that can be deployed to various hosting platforms. This guide covers deployment options, prerequisites, and best practices.
+
+## Deployment options
+
+Invoice Generator supports multiple deployment strategies:
+
+- **Vercel** - Recommended for quick deployment with zero configuration
+- **Self-hosted** - Deploy to your own infrastructure using Docker or Node.js
+- **Other platforms** - Compatible with any platform that supports Next.js applications
+
+## Prerequisites
+
+Before deploying, ensure you have:
+
+<Steps>
+  <Step title="Database setup">
+    Create a Turso database instance. Invoice Generator uses LibSQL (Turso) for data storage.
+    
+    ```bash
+    turso db create invoice-generator
+    turso db show invoice-generator
+    ```
+  </Step>
+  
+  <Step title="OAuth configuration">
+    Set up Google OAuth credentials in Google Cloud Console for authentication.
+    
+    - Create a new OAuth 2.0 Client ID
+    - Add authorized redirect URIs for your deployment domain
+    - Note your Client ID and Client Secret
+  </Step>
+  
+  <Step title="Environment variables">
+    Prepare all required environment variables. See the [environment variables reference](/deployment/environment-variables) for details.
+  </Step>
+  
+  <Step title="Database migration">
+    Run database migrations to set up the schema:
+    
+    ```bash
+    npm run migrate:prod
+    ```
+  </Step>
+</Steps>
+
+## Architecture overview
+
+The application stack includes:
+
+- **Framework**: Next.js 16.1.1 with App Router
+- **Runtime**: Node.js 20+
+- **Database**: Turso (LibSQL) via `@libsql/client`
+- **Authentication**: NextAuth.js 5.0 (beta)
+- **UI**: React 19.2.3 with Tailwind CSS 4
+
+## Build configuration
+
+The Next.js configuration (`next.config.ts:3-18`) includes:
+
+- **Turbopack** enabled for faster builds
+- **Server external packages**: `bcryptjs` for password hashing
+- **Image optimization**: Configured for Google profile images
+
+```typescript
+const nextConfig: NextConfig = {
+  turbopack: {
+    root: ".",
+  },
+  serverExternalPackages: ["bcryptjs"],
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+      },
+    ],
+  },
+};
+```
+
+## Build scripts
+
+From `package.json:5-11`:
+
+- `npm run build` - Production build
+- `npm start` - Start production server
+- `npm run migrate:prod` - Run database migrations for production
+
+<Note>
+The application uses Next.js 16's stable App Router. Ensure your hosting environment supports Node.js 20 or later.
+</Note>
+
+## Security considerations
+
+<Warning>
+Never commit environment variables to version control. Use your platform's secret management system.
+</Warning>
+
+Essential security practices:
+
+1. **Environment variables** - Store sensitive credentials in platform-specific secret managers
+2. **Database authentication** - Always use Turso auth tokens in production
+3. **OAuth secrets** - Rotate Google OAuth credentials regularly
+4. **HTTPS only** - Ensure all production deployments use HTTPS
+5. **Authentication secret** - Generate a strong, random `AUTH_SECRET` value
+
+## Performance optimization
+
+For production deployments:
+
+- Enable Vercel's Edge Network for global distribution
+- Configure appropriate cache headers for static assets
+- Use Turso's edge replicas for reduced database latency
+- Enable Next.js image optimization
+
+## Monitoring and logs
+
+Recommended monitoring setup:
+
+- Track application errors and performance metrics
+- Monitor database connection health
+- Set up alerts for authentication failures
+- Review deployment logs regularly
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Deploy to Vercel" icon="rocket" href="/deployment/vercel">
+    Quick deployment with automatic CI/CD
+  </Card>
+  <Card title="Self-hosted deployment" icon="server" href="/deployment/self-hosted">
+    Deploy to your own infrastructure
+  </Card>
+  <Card title="Environment variables" icon="key" href="/deployment/environment-variables">
+    Complete environment variable reference
+  </Card>
+</CardGroup>

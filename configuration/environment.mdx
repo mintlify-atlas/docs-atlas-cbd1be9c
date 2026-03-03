@@ -1,0 +1,148 @@
+---
+title: Environment variables
+description: Configure your Invoice Generator application with environment variables
+---
+
+Invoice Generator requires several environment variables to function properly. This guide covers all required and optional configuration values.
+
+## Required variables
+
+These environment variables must be set for the application to run.
+
+### Database configuration
+
+```bash
+TURSO_DATABASE_URL=libsql://your-database.turso.io
+TURSO_AUTH_TOKEN=your-auth-token-here
+```
+
+<Note>
+  The `TURSO_DATABASE_URL` is required. The `TURSO_AUTH_TOKEN` is optional for local development but required for production.
+</Note>
+
+See [database configuration](/configuration/database) for setup instructions.
+
+### Authentication configuration
+
+```bash
+AUTH_SECRET=your-secret-key-here
+```
+
+The `AUTH_SECRET` is used by NextAuth.js to encrypt session tokens and sign cookies. Generate a secure random string for production.
+
+<Warning>
+  Never commit your `AUTH_SECRET` to version control. Generate a new secret for each environment.
+</Warning>
+
+**Generate a secret:**
+
+```bash
+openssl rand -base64 32
+```
+
+### Google OAuth (optional)
+
+If you want to enable Google authentication, configure these variables:
+
+```bash
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
+
+These values come from the Google Cloud Console when you set up OAuth 2.0 credentials.
+
+See [authentication configuration](/configuration/authentication) for detailed setup.
+
+## Environment files
+
+The application supports different environment files for various deployment stages:
+
+- `.env.local` - Local development (used by default with `npm run dev`)
+- `.env.production` - Production deployment
+
+<Note>
+  Environment files are gitignored by default. Never commit them to your repository.
+</Note>
+
+## Example configuration
+
+Create a `.env.local` file in your project root:
+
+```bash .env.local
+# Database
+TURSO_DATABASE_URL=libsql://your-database.turso.io
+TURSO_AUTH_TOKEN=your-auth-token
+
+# Authentication
+AUTH_SECRET=your-generated-secret-key
+
+# Google OAuth (optional)
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+## Loading environment variables
+
+Next.js automatically loads environment variables from `.env.local` during development. For production, configure environment variables in your hosting platform.
+
+### Migration scripts
+
+The database migration scripts explicitly load environment files:
+
+```bash
+# Development migration
+npm run migrate
+# Runs: node --env-file=.env.local scripts/migrate.mjs
+
+# Production migration
+npm run migrate:prod
+# Runs: node --env-file=.env.production scripts/migrate.mjs
+```
+
+Reference: `package.json:10-11`, `scripts/migrate.mjs:14-22`
+
+## Security best practices
+
+<Warning>
+  Follow these security guidelines to protect your application:
+</Warning>
+
+1. **Never commit secrets** - Add `.env*` to `.gitignore`
+2. **Use strong secrets** - Generate cryptographically secure random values
+3. **Rotate credentials** - Regularly update secrets and tokens
+4. **Limit access** - Only give environment variables to services that need them
+5. **Use different secrets** - Never reuse secrets across environments
+
+## Troubleshooting
+
+### Missing environment variables
+
+If you see errors about missing environment variables:
+
+```
+Error: TURSO_DATABASE_URL is not set.
+```
+
+1. Verify the variable is set in your `.env.local` file
+2. Check for typos in the variable name
+3. Restart your development server after changing environment files
+
+### Database connection failures
+
+If the database connection fails:
+
+1. Verify `TURSO_DATABASE_URL` is correct
+2. Check that `TURSO_AUTH_TOKEN` is valid and not expired
+3. Ensure your database instance is running
+
+See the [database configuration](/configuration/database) page for more troubleshooting steps.
+
+### Authentication errors
+
+If authentication fails:
+
+1. Verify `AUTH_SECRET` is set
+2. For Google OAuth, check that both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are correct
+3. Ensure OAuth redirect URIs are configured in Google Cloud Console
+
+See the [authentication configuration](/configuration/authentication) page for detailed troubleshooting.

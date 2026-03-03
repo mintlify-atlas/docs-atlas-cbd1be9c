@@ -1,80 +1,314 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start
+description: Create your first invoice in under 2 minutes
 ---
 
-## Get started in three steps
+## Get started with Invoice Generator
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through creating your first professional invoice from scratch. No prior setup required.
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Set up your company profile">
+    Add your business information once, and it will auto-fill on every invoice you create.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    Navigate to the Company page and fill in your details:
 
-### Step 2: Deploy your changes
+    ```typescript
+    interface CompanyDetails {
+      name: string;           // Your business name
+      email: string;          // Contact email
+      phone?: string;         // Phone number (optional)
+      address: string;        // Street address
+      city: string;           // City
+      state: string;          // State/Province
+      zipCode: string;        // Zip/Postal code
+      country: string;        // Country
+      website?: string;       // Website URL (optional)
+      taxId?: string;         // Tax ID/VAT number (optional)
+      logo?: string;          // Company logo (optional)
+    }
+    ```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    <Note>
+      Your company logo will appear on all generated PDF invoices. Supported formats: PNG, JPG, SVG.
+    </Note>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Add a customer">
+    Create a customer record to save time on future invoices.
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    Go to the Customers page and add a new customer:
 
-### Step 3: Go live
+    ```typescript
+    interface Customer {
+      id: string;
+      name: string;           // Customer/company name
+      email: string;          // Email address
+      address: string;        // Street address
+      city: string;           // City
+      state: string;          // State/Province
+      zipCode: string;        // Zip/Postal code
+      country: string;        // Country
+    }
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    Once saved, you can select this customer from a dropdown on any invoice.
+  </Step>
+
+  <Step title="Create your first invoice">
+    Navigate to **Create Invoice** and fill in the details:
+
+    ### Invoice details
+
+    - **Invoice number**: Auto-generated (e.g., `INV-284190123`) or customize it
+    - **Currency**: Choose from 11 supported currencies
+    - **Invoice date**: Defaults to today
+    - **Due date**: Defaults to 30 days from today
+
+    ### Customer information
+
+    Select an existing customer or enter details manually:
+
+    ```tsx
+    <Select
+      value={selectedCustomerId}
+      onValueChange={handleCustomerSelect}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Choose an existing customer" />
+      </SelectTrigger>
+      <SelectContent>
+        {customers.map((customer) => (
+          <SelectItem key={customer.id} value={customer.id}>
+            {customer.name} ({customer.email})
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+    ```
+
+    ### Line items
+
+    Add products or services with quantity and rate:
+
+    ```typescript
+    interface InvoiceItem {
+      id: string;
+      description: string;    // e.g., "Web design — 3 hrs"
+      quantity: number;       // e.g., 3
+      rate: number;          // e.g., 300
+      discount?: number;     // Optional discount percentage
+      taxRate?: number;      // Optional item-level tax rate
+    }
+    ```
+
+    The total is calculated automatically:
+
+    ```typescript
+    // From app/lib/invoice.ts
+    export function calculateInvoiceSummary(
+      items: InvoiceItem[],
+      globalTaxRate: number = 0,
+    ): InvoiceSummary {
+      let subtotal = 0;
+      let itemDiscount = 0;
+      let taxAmount = 0;
+
+      for (const item of items) {
+        const qty = isNaN(item.quantity) ? 0 : item.quantity || 0;
+        const rate = isNaN(item.rate) ? 0 : item.rate || 0;
+        const itemTotal = qty * rate;
+        const discount = item.discount ? (itemTotal * item.discount) / 100 : 0;
+        const itemTaxBase = itemTotal - discount;
+
+        subtotal += itemTotal;
+        itemDiscount += discount;
+
+        const taxRate = item.taxRate ?? globalTaxRate;
+        taxAmount += (itemTaxBase * taxRate) / 100;
+      }
+
+      const subtotalAfterDiscount = subtotal - itemDiscount;
+      const total = subtotalAfterDiscount + taxAmount;
+
+      return {
+        subtotal,
+        itemDiscount,
+        subtotalAfterDiscount,
+        taxAmount,
+        total,
+      };
+    }
+    ```
+  </Step>
+
+  <Step title="Add tax and notes">
+    ### Tax configuration
+
+    Set a global tax rate (e.g., 20% for UK VAT):
+
+    ```tsx
+    <Input
+      label="Tax Rate (%)"
+      name="taxRate"
+      type="number"
+      value={formData.taxRate}
+      onChange={handleInputChange}
+      min="0"
+      max="100"
+      step="0.01"
+    />
+    ```
+
+    ### Notes
+
+    Add payment terms, banking details, or any additional information:
+
+    ```tsx
+    <Textarea
+      name="notes"
+      placeholder="Add any additional notes or terms..."
+      value={formData.notes}
+      onChange={handleInputChange}
+      rows={4}
+    />
+    ```
+
+    <Tip>
+      Common notes include payment terms ("Net 30"), accepted payment methods, or banking details.
+    </Tip>
+  </Step>
+
+  <Step title="Save and send">
+    ### Create the invoice
+
+    Click **Create Invoice** to save it as a draft:
+
+    ```typescript
+    const invoice: Invoice = {
+      id: String(Date.now()),
+      invoiceNumber: formData.invoiceNumber,
+      date: formData.date,
+      dueDate: formData.dueDate,
+      status: "draft",
+      customer: {
+        id: customerId,
+        name: formData.customerName,
+        email: formData.customerEmail,
+        address: formData.customerAddress,
+        city: formData.customerCity,
+        state: formData.customerState,
+        zipCode: formData.customerZipCode,
+        country: formData.customerCountry,
+      },
+      items,
+      notes: formData.notes,
+      taxRate: Number(formData.taxRate),
+      currency: formData.currency,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await createInvoice(invoice);
+    ```
+
+    ### Export or send
+
+    From the invoice detail page, you can:
+
+    - **Download PDF**: Generate a professionally formatted PDF
+    - **Send via email**: Email the invoice directly to your customer
+    - **Mark as sent/paid**: Update the invoice status
+    - **Edit**: Make changes if needed
+
+    <Note>
+      Invoice status automatically updates to show overdue invoices based on the due date.
+    </Note>
+  </Step>
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card
+    title="Save as template"
+    icon="bookmark-plus"
+    href="/features/templates"
+  >
+    Create reusable templates for recurring invoices
+  </Card>
+  <Card
+    title="PDF customization"
+    icon="file-pdf"
+    href="/features/pdf-export"
+  >
+    Customize the appearance of your PDF invoices
+  </Card>
+  <Card
+    title="Email setup"
+    icon="mail"
+    href="/features/email-delivery"
+  >
+    Configure email delivery settings
+  </Card>
+  <Card
+    title="API integration"
+    icon="code"
+    href="/api/overview"
+  >
+    Integrate with your existing systems
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Example invoice
+
+Here's what a complete invoice looks like:
+
+```json
+{
+  "id": "1709478123456",
+  "invoiceNumber": "INV-478123",
+  "date": "2026-03-03",
+  "dueDate": "2026-04-02",
+  "status": "sent",
+  "customer": {
+    "id": "1709471000000",
+    "name": "Bright Digital Ltd",
+    "email": "billing@brightdigital.com",
+    "address": "123 Tech Street",
+    "city": "London",
+    "state": "Greater London",
+    "zipCode": "SW1A 1AA",
+    "country": "United Kingdom"
+  },
+  "items": [
+    {
+      "id": "1",
+      "description": "Web design — 3 hrs",
+      "quantity": 3,
+      "rate": 300
+    },
+    {
+      "id": "2",
+      "description": "Development — 8 hrs",
+      "quantity": 8,
+      "rate": 400
+    },
+    {
+      "id": "3",
+      "description": "Hosting setup — 1×",
+      "quantity": 1,
+      "rate": 100
+    }
+  ],
+  "notes": "Payment due within 30 days. Thank you for your business!",
+  "taxRate": 20,
+  "currency": "GBP",
+  "createdAt": "2026-03-03T10:15:23.456Z",
+  "updatedAt": "2026-03-03T10:15:23.456Z"
+}
+```
+
+<Tip>
+  The invoice above would have a subtotal of £4,000.00, tax of £800.00 (20%), and a total of £4,800.00.
+</Tip>

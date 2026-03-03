@@ -1,0 +1,191 @@
+---
+title: Customer management
+description: Save and manage customer information for faster invoice creation
+---
+
+## Overview
+
+The customer management feature allows you to maintain a database of customer information that can be quickly selected when creating invoices. This eliminates repetitive data entry and ensures consistency across all invoices sent to the same customer.
+
+## Customer data structure
+
+Each customer record includes comprehensive contact and address information:
+
+```typescript
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  logo?: string;
+}
+```
+
+All fields except `logo` are standard text fields. The logo is stored as a base64-encoded data URL.
+
+## Adding customers
+
+Navigate to `/customers` to access the customer management page. The interface is split into two sections:
+
+### Customer form (left panel)
+
+Fill in the following fields:
+
+**Required fields:**
+- **Name**: Customer or company name
+- **Email**: Valid email address (validated with regex pattern)
+
+**Optional fields:**
+- **Customer logo**: Upload an image (PNG, JPG, SVG) up to 2MB
+- **Address**: Street address
+- **City**: City name
+- **State**: State or province
+- **Zip Code**: Postal or ZIP code
+- **Country**: Select from 86+ countries (defaults to United Kingdom)
+
+### Logo upload
+
+Customer logos enhance invoice professionalism:
+
+- **Supported formats**: PNG, JPG, SVG, and other image types
+- **Maximum size**: 2MB
+- **Storage**: Base64-encoded in IndexedDB
+- **Display**: 64×64px preview in customer list, 80×80px on invoices
+
+The logo upload implementation includes validation:
+
+```typescript
+const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    setLogoError("Please upload a valid image file");
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    setLogoError("Image must be smaller than 2MB");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    setLogo(ev.target?.result as string);
+    setLogoError(undefined);
+  };
+  reader.readAsDataURL(file);
+};
+```
+
+<Note>
+Logos are stored as base64 data URLs, so larger images will consume more storage space in IndexedDB. Consider optimizing images before upload for better performance.
+</Note>
+
+## Customer list (right panel)
+
+All saved customers appear in a scrollable list showing:
+
+- Customer logo (if uploaded)
+- Customer name
+- Email address
+- Full address (if provided)
+- Edit and delete buttons
+
+### Empty state
+
+When no customers exist, the list displays:
+
+> No customers yet. Add your first customer to get started.
+
+## Editing customers
+
+Click the **Edit** button (pencil icon) on any customer card to:
+
+1. Load customer data into the form
+2. Modify any fields
+3. Click **Update Customer** to save changes
+4. Click **Cancel** to discard changes
+
+<Tip>
+Editing a customer updates all future invoices that use this customer, but does not affect existing invoices since customer data is embedded in each invoice record.
+</Tip>
+
+## Deleting customers
+
+Click the **Delete** button (trash icon) to remove a customer:
+
+1. Confirmation dialog appears: "Are you sure you want to delete this customer?"
+2. Click OK to permanently delete
+3. Click Cancel to abort
+
+<Warning>
+Deleting a customer does not affect existing invoices. Customer information is embedded in each invoice at creation time, so historical invoices remain intact.
+</Warning>
+
+## Using customers in invoices
+
+When creating or editing an invoice:
+
+1. Navigate to the Customer Information section
+2. Click the **Select Customer** dropdown
+3. Choose a customer from the list (displayed as "Name (Email)")
+4. All customer fields auto-fill instantly
+5. You can still edit fields before saving the invoice
+
+The customer selection implementation from `app/components/InvoiceForm.tsx:208`:
+
+```typescript
+const handleCustomerSelect = (customerId: string) => {
+  setSelectedCustomerId(customerId);
+
+  const selected = customers.find((customer) => customer.id === customerId);
+  if (!selected) return;
+
+  setFormData((prev) => ({
+    ...prev,
+    customerName: selected.name,
+    customerEmail: selected.email,
+    customerAddress: selected.address,
+    customerCity: selected.city,
+    customerState: selected.state,
+    customerZipCode: selected.zipCode,
+    customerCountry: selected.country,
+  }));
+};
+```
+
+## Quick navigation
+
+From the invoice creation form, you can click **Manage customers** to open the customers page in a new context, allowing you to add missing customers without losing your invoice progress.
+
+## Country support
+
+The country dropdown includes 86+ countries with United Kingdom and United States at the top for convenience. The full list is defined in `app/customers/page.tsx:45` and includes countries from Afghanistan to Zimbabwe.
+
+## Data persistence
+
+Customer data is stored locally using IndexedDB through these functions from `app/lib/storage.ts`:
+
+```typescript
+export async function getCustomers(): Promise<Customer[]>
+export async function getCustomerById(id: string): Promise<Customer | null>
+export async function createCustomer(customer: Customer): Promise<Customer>
+export async function updateCustomer(id: string, updates: Partial<Customer>): Promise<Customer | null>
+export async function deleteCustomer(id: string): Promise<boolean>
+```
+
+All operations are asynchronous and return Promises for optimal performance.
+
+## Form validation
+
+The customer form validates:
+
+- **Name**: Cannot be empty
+- **Email**: Must be a valid email format (pattern: `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`)
+- **Logo**: Must be an image file under 2MB
+
+Validation errors appear below each field in red text. The form cannot be submitted until all errors are resolved.

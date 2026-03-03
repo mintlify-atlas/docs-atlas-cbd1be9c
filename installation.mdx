@@ -1,0 +1,466 @@
+---
+title: Installation
+description: Set up Invoice Generator locally for development
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js** 20.x or higher
+- **npm**, **yarn**, or **pnpm** package manager
+- **Git** for cloning the repository
+
+<Note>
+  This guide covers local development setup. For production deployment, see the [Deployment guide](/deployment/overview).
+</Note>
+
+## Installation steps
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Invoice Generator repository to your local machine:
+
+    ```bash
+    git clone https://github.com/yourusername/invoice-generator.git
+    cd invoice-generator
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install the required packages using your preferred package manager:
+
+    <CodeGroup>
+      ```bash npm
+      npm install
+      ```
+
+      ```bash yarn
+      yarn install
+      ```
+
+      ```bash pnpm
+      pnpm install
+      ```
+    </CodeGroup>
+
+    ### Key dependencies
+
+    The application uses the following core packages:
+
+    ```json
+    {
+      "dependencies": {
+        "next": "16.1.1",
+        "react": "19.2.3",
+        "react-dom": "19.2.3",
+        "@libsql/client": "^0.17.0",
+        "next-auth": "^5.0.0-beta.30",
+        "html2pdf.js": "^0.14.0",
+        "date-fns": "^4.1.0",
+        "tailwind-merge": "^3.4.1",
+        "lucide-react": "^0.574.0"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env.local` file in the project root with the following variables:
+
+    ```bash
+    # Turso Database Configuration
+    TURSO_DATABASE_URL=libsql://your-database.turso.io
+    TURSO_AUTH_TOKEN=your-auth-token
+
+    # NextAuth Configuration
+    AUTH_SECRET=your-secret-key-here
+    AUTH_URL=http://localhost:3000
+
+    # Google OAuth (Optional)
+    GOOGLE_CLIENT_ID=your-google-client-id
+    GOOGLE_CLIENT_SECRET=your-google-client-secret
+    ```
+
+    ### Get Turso credentials
+
+    1. Install the Turso CLI:
+
+    ```bash
+    curl -sSfL https://get.tur.so/install.sh | bash
+    ```
+
+    2. Sign up and authenticate:
+
+    ```bash
+    turso auth signup
+    ```
+
+    3. Create a new database:
+
+    ```bash
+    turso db create invoice-generator
+    ```
+
+    4. Get the database URL:
+
+    ```bash
+    turso db show invoice-generator --url
+    ```
+
+    5. Create an auth token:
+
+    ```bash
+    turso db tokens create invoice-generator
+    ```
+
+    ### Generate AUTH_SECRET
+
+    Generate a secure random string for NextAuth:
+
+    ```bash
+    openssl rand -base64 32
+    ```
+
+    <Warning>
+      Never commit your `.env.local` file to version control. Add it to `.gitignore`.
+    </Warning>
+  </Step>
+
+  <Step title="Set up the database">
+    Run the database migration to create the required tables:
+
+    <CodeGroup>
+      ```bash npm
+      npm run migrate
+      ```
+
+      ```bash yarn
+      yarn migrate
+      ```
+
+      ```bash pnpm
+      pnpm migrate
+      ```
+    </CodeGroup>
+
+    This executes the migration script:
+
+    ```javascript
+    // scripts/migrate.mjs
+    import { createClient } from "@libsql/client";
+    import { readFileSync } from "fs";
+    import { join, dirname } from "path";
+    import { fileURLToPath } from "url";
+
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const schema = readFileSync(join(__dirname, "../app/lib/schema.sql"), "utf8");
+
+    const db = createClient({
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
+
+    console.log(`Running migration on: ${process.env.TURSO_DATABASE_URL}`);
+    await db.executeMultiple(schema);
+    console.log("Migration complete.");
+    ```
+
+    ### Database schema
+
+    The migration creates the following tables:
+
+    ```sql
+    -- Customers
+    CREATE TABLE customers (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      email       TEXT NOT NULL,
+      address     TEXT NOT NULL,
+      city        TEXT NOT NULL,
+      state       TEXT NOT NULL,
+      zip_code    TEXT NOT NULL,
+      country     TEXT NOT NULL,
+      logo        TEXT
+    );
+
+    -- Invoices
+    CREATE TABLE invoices (
+      id                TEXT PRIMARY KEY,
+      invoice_number    TEXT UNIQUE NOT NULL,
+      date              TEXT NOT NULL,
+      due_date          TEXT NOT NULL,
+      status            TEXT NOT NULL DEFAULT 'draft',
+      customer_id       TEXT,
+      customer_snapshot TEXT NOT NULL,
+      notes             TEXT,
+      tax_rate          REAL,
+      currency          TEXT NOT NULL DEFAULT 'GBP',
+      created_at        TEXT NOT NULL,
+      updated_at        TEXT NOT NULL,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    );
+
+    -- Invoice Items
+    CREATE TABLE invoice_items (
+      id          TEXT PRIMARY KEY,
+      invoice_id  TEXT NOT NULL,
+      description TEXT NOT NULL,
+      quantity    REAL NOT NULL,
+      rate        REAL NOT NULL,
+      discount    REAL,
+      tax_rate    REAL,
+      FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+    );
+
+    -- Templates
+    CREATE TABLE templates (
+      id               TEXT PRIMARY KEY,
+      name             TEXT NOT NULL,
+      description      TEXT,
+      customer_partial TEXT NOT NULL,
+      items_partial    TEXT NOT NULL,
+      notes            TEXT,
+      tax_rate         REAL,
+      currency         TEXT NOT NULL DEFAULT 'GBP',
+      created_at       TEXT NOT NULL
+    );
+
+    -- Settings
+    CREATE TABLE settings (
+      id               TEXT PRIMARY KEY DEFAULT 'default',
+      default_currency TEXT NOT NULL DEFAULT 'GBP',
+      updated_at       TEXT NOT NULL
+    );
+    ```
+
+    <Info>
+      The schema uses SQLite with foreign key constraints enabled for data integrity.
+    </Info>
+  </Step>
+
+  <Step title="Start the development server">
+    Run the development server:
+
+    <CodeGroup>
+      ```bash npm
+      npm run dev
+      ```
+
+      ```bash yarn
+      yarn dev
+      ```
+
+      ```bash pnpm
+      pnpm dev
+      ```
+    </CodeGroup>
+
+    The application will be available at [http://localhost:3000](http://localhost:3000).
+
+    ### Available scripts
+
+    ```json
+    {
+      "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "eslint",
+        "migrate": "node --env-file=.env.local scripts/migrate.mjs",
+        "migrate:prod": "node --env-file=.env.production scripts/migrate.mjs"
+      }
+    }
+    ```
+
+    <Tip>
+      The development server supports hot module replacement (HMR), so changes are reflected instantly.
+    </Tip>
+  </Step>
+</Steps>
+
+## Project structure
+
+Understanding the project layout:
+
+```
+invoice-generator/
+├── app/
+│   ├── (auth)/              # Authentication pages
+│   │   ├── sign-in/
+│   │   └── sign-up/
+│   ├── api/                 # API routes
+│   │   ├── auth/           # NextAuth endpoints
+│   │   ├── invoices/       # Invoice CRUD
+│   │   ├── pdf/            # PDF generation
+│   │   └── email/          # Email sending
+│   ├── components/          # React components
+│   │   ├── shared/         # Reusable UI components
+│   │   ├── InvoiceForm.tsx
+│   │   ├── CompanyForm.tsx
+│   │   └── Navigation.tsx
+│   ├── lib/                 # Utility functions
+│   │   ├── invoice.ts      # Invoice calculations
+│   │   ├── pdf.ts          # PDF generation logic
+│   │   ├── storage.ts      # Database operations
+│   │   ├── turso.ts        # Database client
+│   │   ├── types.ts        # TypeScript types
+│   │   ├── validation.ts   # Form validation
+│   │   └── schema.sql      # Database schema
+│   ├── invoices/           # Invoice pages
+│   ├── customers/          # Customer management
+│   ├── company/            # Company settings
+│   └── templates/          # Template management
+├── public/                  # Static assets
+├── scripts/                 # Build scripts
+│   └── migrate.mjs         # Database migration
+├── auth.config.ts          # NextAuth configuration
+├── middleware.ts           # Next.js middleware
+└── next.config.ts          # Next.js configuration
+```
+
+## Turso database client
+
+The application uses Turso (edge-hosted SQLite) for data storage:
+
+```typescript
+// app/lib/turso.ts
+import { createClient } from "@libsql/client";
+
+const db = createClient({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+export default db;
+```
+
+This client is used throughout the application for database operations:
+
+```typescript
+// Example: Creating an invoice
+import db from "@/app/lib/turso";
+
+export async function createInvoice(invoice: Invoice) {
+  await db.execute({
+    sql: `INSERT INTO invoices (...) VALUES (...)`,
+    args: [invoice.id, invoice.invoiceNumber, ...]
+  });
+}
+```
+
+## Authentication setup
+
+The application uses NextAuth.js v5 with credential and OAuth support:
+
+```typescript
+// auth.config.ts
+import type { NextAuthConfig } from "next-auth";
+import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
+
+export const authConfig = {
+  session: { strategy: "jwt" },
+  pages: {
+    signIn: "/sign-in",
+  },
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      checks: ["state"],
+    }),
+    Credentials({}),
+  ],
+  callbacks: {
+    authorized({ auth }) {
+      return !!auth?.user;
+    },
+  },
+} satisfies NextAuthConfig;
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Database connection errors">
+    If you encounter Turso connection errors:
+
+    1. Verify your `TURSO_DATABASE_URL` is correct
+    2. Ensure your `TURSO_AUTH_TOKEN` is valid and not expired
+    3. Check that your database exists: `turso db list`
+    4. Test the connection: `turso db shell invoice-generator`
+  </Accordion>
+
+  <Accordion title="Module not found errors">
+    If you see "Module not found" errors:
+
+    1. Delete `node_modules` and lock files:
+       ```bash
+       rm -rf node_modules package-lock.json
+       ```
+    2. Clear npm cache:
+       ```bash
+       npm cache clean --force
+       ```
+    3. Reinstall dependencies:
+       ```bash
+       npm install
+       ```
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    If port 3000 is already in use:
+
+    1. Kill the process using port 3000:
+       ```bash
+       lsof -ti:3000 | xargs kill -9
+       ```
+    2. Or run on a different port:
+       ```bash
+       PORT=3001 npm run dev
+       ```
+  </Accordion>
+
+  <Accordion title="Environment variables not loading">
+    Ensure your `.env.local` file:
+
+    - Is in the project root directory
+    - Has no syntax errors (no spaces around `=`)
+    - Contains all required variables
+    - Restart the dev server after changes
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick start guide"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Create your first invoice
+  </Card>
+  <Card
+    title="Configuration"
+    icon="settings"
+    href="/configuration/environment"
+  >
+    Customize the application settings
+  </Card>
+  <Card
+    title="API reference"
+    icon="code"
+    href="/api/overview"
+  >
+    Explore the API endpoints
+  </Card>
+  <Card
+    title="Deployment"
+    icon="cloud"
+    href="/deployment/overview"
+  >
+    Deploy to production
+  </Card>
+</CardGroup>

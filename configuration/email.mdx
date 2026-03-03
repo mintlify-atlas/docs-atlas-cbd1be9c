@@ -1,0 +1,531 @@
+---
+title: Email configuration
+description: Configure email sending for invoice delivery
+---
+
+Invoice Generator includes an email API endpoint for sending invoices to customers. The email functionality is currently a stub that requires implementation with an email service provider.
+
+## Current implementation
+
+The application includes a basic email API route at `/api/email` that validates inputs but doesn't send actual emails:
+
+```typescript app/api/email/route.ts
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { invoiceId, recipientEmail, subject, message } = body;
+    
+    // Validate inputs
+    if (!invoiceId || !recipientEmail) {
+      return NextResponse.json(
+        { error: "Invoice ID and recipient email are required" },
+        { status: 400 },
+      );
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipientEmail)) {
+      return NextResponse.json(
+        { error: "Invalid email address" },
+        { status: 400 },
+      );
+    }
+    
+    // TODO: Implement email sending logic here
+    
+    return NextResponse.json(
+      {
+        message: "Email sending not yet implemented",
+        invoiceId,
+        recipientEmail,
+        subject: subject || "Your Invoice",
+      },
+      { status: 501 }, // Not Implemented
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Failed to send email",
+      },
+      { status: 500 },
+    );
+  }
+}
+```
+
+Reference: `app/api/email/route.ts:14-68`
+
+## Supported email services
+
+The application supports integration with various email service providers:
+
+### Resend (recommended)
+
+[Resend](https://resend.com) is a modern email API with excellent developer experience.
+
+**Installation:**
+
+```bash
+npm install resend
+```
+
+**Environment variables:**
+
+```bash
+RESEND_API_KEY=re_123456789
+```
+
+**Implementation example:**
+
+```typescript
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+await resend.emails.send({
+  from: 'invoices@yourdomain.com',
+  to: recipientEmail,
+  subject: subject || 'Your Invoice',
+  html: '<p>Your invoice is attached</p>',
+  attachments: [
+    {
+      filename: `invoice-${invoiceNumber}.pdf`,
+      content: pdfBuffer,
+    },
+  ],
+});
+```
+
+### SendGrid
+
+[SendGrid](https://sendgrid.com) is a popular email delivery platform with robust features.
+
+**Installation:**
+
+```bash
+npm install @sendgrid/mail
+```
+
+**Environment variables:**
+
+```bash
+SENDGRID_API_KEY=SG.123456789
+```
+
+**Implementation example:**
+
+```typescript
+import sgMail from '@sendgrid/mail';
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+
+await sgMail.send({
+  from: 'invoices@yourdomain.com',
+  to: recipientEmail,
+  subject: subject || 'Your Invoice',
+  html: '<p>Your invoice is attached</p>',
+  attachments: [
+    {
+      content: pdfBuffer.toString('base64'),
+      filename: `invoice-${invoiceNumber}.pdf`,
+      type: 'application/pdf',
+      disposition: 'attachment',
+    },
+  ],
+});
+```
+
+### Mailgun
+
+[Mailgun](https://www.mailgun.com) offers powerful email APIs and analytics.
+
+**Installation:**
+
+```bash
+npm install mailgun.js form-data
+```
+
+**Environment variables:**
+
+```bash
+MAILGUN_API_KEY=your-api-key
+MAILGUN_DOMAIN=yourdomain.com
+```
+
+**Implementation example:**
+
+```typescript
+import formData from 'form-data';
+import Mailgun from 'mailgun.js';
+
+const mailgun = new Mailgun(formData);
+const mg = mailgun.client({
+  username: 'api',
+  key: process.env.MAILGUN_API_KEY!,
+});
+
+await mg.messages.create(process.env.MAILGUN_DOMAIN!, {
+  from: 'invoices@yourdomain.com',
+  to: recipientEmail,
+  subject: subject || 'Your Invoice',
+  html: '<p>Your invoice is attached</p>',
+  attachment: pdfBuffer,
+});
+```
+
+### AWS SES
+
+[AWS SES](https://aws.amazon.com/ses/) is Amazon's scalable email service.
+
+**Installation:**
+
+```bash
+npm install @aws-sdk/client-ses
+```
+
+**Environment variables:**
+
+```bash
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+```
+
+**Implementation example:**
+
+```typescript
+import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses';
+
+const ses = new SESClient({ region: process.env.AWS_REGION });
+
+const message = [
+  `From: invoices@yourdomain.com`,
+  `To: ${recipientEmail}`,
+  `Subject: ${subject || 'Your Invoice'}`,
+  `MIME-Version: 1.0`,
+  `Content-Type: multipart/mixed; boundary="boundary"`,
+  ``,
+  `--boundary`,
+  `Content-Type: text/html; charset=UTF-8`,
+  ``,
+  `<p>Your invoice is attached</p>`,
+  `--boundary`,
+  `Content-Type: application/pdf; name="invoice.pdf"`,
+  `Content-Disposition: attachment; filename="invoice.pdf"`,
+  `Content-Transfer-Encoding: base64`,
+  ``,
+  pdfBuffer.toString('base64'),
+  `--boundary--`,
+].join('\n');
+
+await ses.send(new SendRawEmailCommand({
+  RawMessage: { Data: Buffer.from(message) },
+}));
+```
+
+Reference: `app/api/email/route.ts:5-9`
+
+## Implementation steps
+
+To implement email sending:
+
+<Steps>
+  <Step title="Choose an email service">
+    Select one of the supported email services (Resend, SendGrid, Mailgun, or AWS SES) based on your needs and budget.
+  </Step>
+  
+  <Step title="Install the library">
+    Install the corresponding npm package:
+    
+    ```bash
+    npm install resend
+    # or
+    npm install @sendgrid/mail
+    # or
+    npm install mailgun.js form-data
+    # or
+    npm install @aws-sdk/client-ses
+    ```
+  </Step>
+  
+  <Step title="Configure environment variables">
+    Add the required API keys and configuration to your `.env.local` file.
+  </Step>
+  
+  <Step title="Create email template">
+    Design an HTML email template for invoice delivery. Include:
+    - Company branding
+    - Invoice summary (number, amount, due date)
+    - Payment instructions
+    - Professional formatting
+  </Step>
+  
+  <Step title="Update the email route">
+    Replace the TODO section in `app/api/email/route.ts` with your chosen service implementation.
+  </Step>
+  
+  <Step title="Generate and attach PDF">
+    Get the invoice data from the database, generate a PDF using the existing PDF API, and attach it to the email.
+  </Step>
+  
+  <Step title="Update invoice status">
+    After successfully sending the email, update the invoice status to "sent" in the database.
+  </Step>
+  
+  <Step title="Test thoroughly">
+    Test email sending with various scenarios:
+    - Valid and invalid email addresses
+    - Different invoice types
+    - PDF attachment generation
+    - Error handling
+  </Step>
+</Steps>
+
+## Email template example
+
+Here's a basic HTML email template for invoices:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #f4f4f4; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+    .invoice-details { background-color: #f9f9f9; padding: 15px; margin: 20px 0; }
+    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 30px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Invoice from {{companyName}}</h1>
+    </div>
+    
+    <div class="content">
+      <p>Hello {{customerName}},</p>
+      
+      <p>Thank you for your business. Please find your invoice attached to this email.</p>
+      
+      <div class="invoice-details">
+        <p><strong>Invoice Number:</strong> {{invoiceNumber}}</p>
+        <p><strong>Invoice Date:</strong> {{invoiceDate}}</p>
+        <p><strong>Due Date:</strong> {{dueDate}}</p>
+        <p><strong>Amount Due:</strong> {{currency}} {{totalAmount}}</p>
+      </div>
+      
+      <p><strong>Payment Instructions:</strong></p>
+      <p>{{paymentInstructions}}</p>
+      
+      <p>If you have any questions about this invoice, please contact us.</p>
+      
+      <p>Best regards,<br>{{companyName}}</p>
+    </div>
+    
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+    </div>
+  </div>
+</body>
+</html>
+```
+
+## Complete implementation example
+
+Here's a complete implementation using Resend:
+
+```typescript app/api/email/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { Resend } from 'resend';
+import db from "@/app/lib/turso";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { invoiceId, recipientEmail, subject, message } = body;
+    
+    // Validate inputs
+    if (!invoiceId || !recipientEmail) {
+      return NextResponse.json(
+        { error: "Invoice ID and recipient email are required" },
+        { status: 400 },
+      );
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipientEmail)) {
+      return NextResponse.json(
+        { error: "Invalid email address" },
+        { status: 400 },
+      );
+    }
+    
+    // Get invoice data
+    const result = await db.execute({
+      sql: "SELECT * FROM invoices WHERE id = ? LIMIT 1",
+      args: [invoiceId],
+    });
+    
+    const invoice = result.rows[0];
+    if (!invoice) {
+      return NextResponse.json(
+        { error: "Invoice not found" },
+        { status: 404 },
+      );
+    }
+    
+    // Generate PDF (call your PDF API)
+    const pdfResponse = await fetch(`${process.env.NEXT_PUBLIC_URL}/api/pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invoiceId }),
+    });
+    
+    if (!pdfResponse.ok) {
+      throw new Error('Failed to generate PDF');
+    }
+    
+    const pdfBuffer = await pdfResponse.arrayBuffer();
+    
+    // Send email
+    await resend.emails.send({
+      from: 'invoices@yourdomain.com',
+      to: recipientEmail,
+      subject: subject || `Invoice ${invoice.invoice_number}`,
+      html: `<p>${message || 'Please find your invoice attached.'}</p>`,
+      attachments: [
+        {
+          filename: `invoice-${invoice.invoice_number}.pdf`,
+          content: Buffer.from(pdfBuffer),
+        },
+      ],
+    });
+    
+    // Update invoice status
+    await db.execute({
+      sql: "UPDATE invoices SET status = 'sent', updated_at = datetime('now') WHERE id = ?",
+      args: [invoiceId],
+    });
+    
+    return NextResponse.json(
+      {
+        message: "Invoice sent successfully",
+        invoiceId,
+        recipientEmail,
+      },
+      { status: 200 },
+    );
+  } catch (error) {
+    console.error('[email]', error);
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Failed to send email",
+      },
+      { status: 500 },
+    );
+  }
+}
+```
+
+## Environment variables
+
+Add the appropriate environment variables for your chosen service:
+
+```bash .env.local
+# Resend
+RESEND_API_KEY=re_123456789
+
+# SendGrid
+SENDGRID_API_KEY=SG.123456789
+
+# Mailgun
+MAILGUN_API_KEY=your-api-key
+MAILGUN_DOMAIN=yourdomain.com
+
+# AWS SES
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+
+# Application URL (for PDF generation)
+NEXT_PUBLIC_URL=http://localhost:3000
+```
+
+## Security considerations
+
+<Warning>
+  Follow these security best practices when implementing email sending:
+</Warning>
+
+1. **Validate email addresses** - Always validate recipient emails to prevent abuse
+2. **Rate limiting** - Implement rate limiting to prevent spam
+3. **Authentication** - Require authentication before sending emails
+4. **SPF/DKIM/DMARC** - Configure email authentication records for your domain
+5. **Secure API keys** - Never expose API keys in client-side code
+6. **Input sanitization** - Sanitize user input to prevent injection attacks
+7. **Attachment limits** - Limit attachment sizes to prevent abuse
+
+## Domain verification
+
+Most email services require domain verification:
+
+1. **Add DNS records** - Add TXT, SPF, DKIM records to your domain DNS
+2. **Verify ownership** - Complete the verification process in your email service dashboard
+3. **Set up SPF** - Add SPF record to authorize your email service
+4. **Enable DKIM** - Configure DKIM signing for email authentication
+5. **Configure DMARC** - Set up DMARC policy for email security
+
+## Testing
+
+Test email sending thoroughly:
+
+```bash
+curl -X POST http://localhost:3000/api/email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "invoiceId": "test-invoice-id",
+    "recipientEmail": "test@example.com",
+    "subject": "Test Invoice",
+    "message": "This is a test invoice."
+  }'
+```
+
+## Troubleshooting
+
+### Email not sending
+
+1. Check API keys are correct and active
+2. Verify domain is verified in your email service
+3. Check rate limits haven't been exceeded
+4. Review error logs for specific error messages
+
+### Emails going to spam
+
+1. Configure SPF, DKIM, and DMARC records
+2. Use a verified domain for the sender address
+3. Avoid spam trigger words in subject and content
+4. Maintain a good sender reputation
+
+### PDF attachment issues
+
+1. Verify PDF is generating correctly
+2. Check file size limits for your email service
+3. Ensure PDF buffer encoding is correct
+4. Test PDF attachment separately
+
+## Next steps
+
+After implementing email sending:
+
+1. Add email tracking (opens, clicks)
+2. Implement email templates for different invoice types
+3. Add scheduling for automatic invoice delivery
+4. Create email logs for sent invoices
+5. Add retry logic for failed sends
+6. Implement email preferences for customers

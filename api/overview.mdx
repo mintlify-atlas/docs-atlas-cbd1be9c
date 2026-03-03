@@ -1,0 +1,155 @@
+---
+title: API overview
+description: Learn about the Invoice Generator API structure, endpoints, and how to make requests
+---
+
+The Invoice Generator API is built with Next.js App Router and provides RESTful endpoints for managing invoices, templates, and PDF generation.
+
+## Base URL
+
+All API endpoints are relative to your application's base URL:
+
+```
+https://your-domain.com/api
+```
+
+For local development:
+
+```
+http://localhost:3000/api
+```
+
+## API structure
+
+The API follows Next.js App Router conventions with route handlers located in `app/api/`. Each directory represents an endpoint:
+
+```
+app/api/
+├── auth/
+│   ├── [...nextauth]/     # NextAuth.js authentication
+│   └── register/          # User registration
+├── invoices/
+│   ├── route.ts           # GET, POST /api/invoices
+│   └── [id]/
+│       └── route.ts       # GET, PATCH, DELETE /api/invoices/:id
+├── templates/
+│   └── route.ts           # GET, POST /api/templates
+├── pdf/
+│   └── route.ts           # POST /api/pdf
+└── email/
+    └── route.ts           # POST /api/email
+```
+
+## Request format
+
+All API requests should use JSON formatting:
+
+```bash
+curl -X POST https://your-domain.com/api/invoices \
+  -H "Content-Type: application/json" \
+  -d '{"invoiceNumber": "INV-001", "customer": "Acme Corp"}'
+```
+
+## Response format
+
+API responses are returned in JSON format with appropriate HTTP status codes.
+
+### Success response
+
+```json
+{
+  "message": "Invoice created successfully",
+  "invoice": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "invoiceNumber": "INV-001",
+    "customer": "Acme Corp"
+  }
+}
+```
+
+### Error response
+
+```json
+{
+  "error": "Missing required fields"
+}
+```
+
+## Status codes
+
+The API uses standard HTTP status codes:
+
+| Code | Description |
+|------|-------------|
+| `200` | OK - Request succeeded |
+| `201` | Created - Resource created successfully |
+| `400` | Bad Request - Invalid request parameters |
+| `401` | Unauthorized - Authentication required |
+| `404` | Not Found - Resource not found |
+| `409` | Conflict - Resource already exists |
+| `500` | Internal Server Error - Server error |
+| `501` | Not Implemented - Feature not yet available |
+
+## Available endpoints
+
+<CardGroup cols={2}>
+  <Card title="Invoices" icon="file-invoice" href="/api/invoices">
+    Create, read, update, and delete invoices
+  </Card>
+  <Card title="Templates" icon="palette" href="/api/templates">
+    Manage invoice templates and designs
+  </Card>
+  <Card title="PDF generation" icon="file-pdf" href="/api/pdf">
+    Generate PDF versions of invoices
+  </Card>
+  <Card title="Email" icon="envelope" href="/api/email">
+    Send invoices via email
+  </Card>
+</CardGroup>
+
+## Runtime configuration
+
+All API routes use the Node.js runtime for full access to server-side features:
+
+```typescript app/api/auth/[...nextauth]/route.ts
+export const runtime = "nodejs";
+```
+
+## Error handling
+
+All endpoints implement try-catch error handling:
+
+```typescript app/api/invoices/route.ts
+try {
+  const body = await request.json();
+  
+  if (!body.invoiceNumber || !body.customer) {
+    return NextResponse.json(
+      { error: "Missing required fields" },
+      { status: 400 }
+    );
+  }
+  
+  // Process request...
+} catch (error) {
+  return NextResponse.json(
+    {
+      error: error instanceof Error 
+        ? error.message 
+        : "Failed to create invoice"
+    },
+    { status: 500 }
+  );
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Learn how to authenticate API requests
+  </Card>
+  <Card title="Invoice endpoints" icon="file-invoice" href="/api/invoices">
+    Explore invoice management endpoints
+  </Card>
+</CardGroup>

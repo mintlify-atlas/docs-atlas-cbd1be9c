@@ -1,0 +1,155 @@
+---
+title: InvoiceTemplate
+description: Reusable invoice templates with predefined items and settings
+---
+
+## InvoiceTemplate
+
+The `InvoiceTemplate` interface represents a reusable invoice template that can be used to quickly generate new invoices with predefined items, customer details, and settings.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the template
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Display name for the template (e.g., "Monthly Retainer", "Consulting Services")
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Optional description explaining when or how to use this template
+</ResponseField>
+
+<ResponseField name="customer" type="Partial<Customer>" required>
+  <Expandable title="Partial customer object">
+    Partial customer information. All customer fields are optional, allowing templates to specify only common fields like country or state. See [Customer](/api/types/customer) for available fields.
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="items" type="Partial<InvoiceItem>[]" required>
+  <Expandable title="Array of partial invoice items">
+    Predefined line items with optional fields. Typically includes description and rate, while quantity can be filled in when creating an invoice. See [InvoiceItem](/api/types/invoice#invoiceitem) for available fields.
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  Optional default notes or terms to include on invoices created from this template
+</ResponseField>
+
+<ResponseField name="taxRate" type="number">
+  Optional default tax rate as a percentage (e.g., 10 for 10%)
+</ResponseField>
+
+<ResponseField name="currency" type="string" required>
+  Three-letter ISO 4217 currency code (e.g., "USD", "EUR", "GBP")
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  Timestamp when the template was created in ISO 8601 format
+</ResponseField>
+
+### TypeScript definition
+
+```typescript
+export interface InvoiceTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  customer: Partial<Customer>;
+  items: Partial<InvoiceItem>[];
+  notes?: string;
+  taxRate?: number;
+  currency: string;
+  createdAt: string;
+}
+```
+
+### Example
+
+```typescript
+const template: InvoiceTemplate = {
+  id: "tmpl_abc123",
+  name: "Web Development - Monthly Retainer",
+  description: "Standard monthly retainer for ongoing web development services",
+  customer: {
+    // Leave most fields empty for flexibility
+    country: "United States",
+    state: "CA"
+  },
+  items: [
+    {
+      description: "Monthly Development Hours",
+      rate: 150,
+      // quantity will be filled in per invoice
+    },
+    {
+      description: "Project Management",
+      quantity: 1,
+      rate: 500
+    },
+    {
+      description: "Hosting & Maintenance",
+      quantity: 1,
+      rate: 200
+    }
+  ],
+  notes: "Payment due within 30 days. Includes up to 2 hours of support.",
+  taxRate: 8.5,
+  currency: "USD",
+  createdAt: "2026-01-15T12:00:00Z"
+};
+```
+
+### Creating invoices from templates
+
+Templates serve as blueprints for new invoices. When creating an invoice from a template:
+
+1. Copy predefined items and fill in missing quantities
+2. Merge template customer data with specific customer details
+3. Use template defaults for currency, tax rate, and notes
+4. Generate new invoice-specific fields (id, invoiceNumber, dates, status)
+
+```typescript
+import type { Invoice, InvoiceTemplate } from './types';
+
+function createInvoiceFromTemplate(
+  template: InvoiceTemplate,
+  customer: Customer,
+  overrides?: Partial<Invoice>
+): Invoice {
+  return {
+    id: generateId(),
+    invoiceNumber: generateInvoiceNumber(),
+    date: new Date().toISOString(),
+    dueDate: addDays(new Date(), 30).toISOString(),
+    status: "draft",
+    customer: {
+      ...template.customer,
+      ...customer // Override template customer with actual customer
+    },
+    items: template.items.map(item => ({
+      id: generateId(),
+      description: item.description || "",
+      quantity: item.quantity || 1,
+      rate: item.rate || 0,
+      discount: item.discount,
+      taxRate: item.taxRate
+    })),
+    notes: template.notes,
+    taxRate: template.taxRate,
+    currency: template.currency,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides
+  };
+}
+```
+
+### Use cases
+
+Templates are useful for:
+
+- **Recurring services**: Monthly retainers with standard line items
+- **Package deals**: Predefined service bundles at set prices
+- **Industry-specific invoices**: Templates for common services in your industry
+- **Multi-currency invoicing**: Separate templates for different currencies
+- **Regional variations**: Templates with different tax rates or terms by region

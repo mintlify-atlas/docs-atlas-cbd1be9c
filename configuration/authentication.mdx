@@ -1,0 +1,502 @@
+---
+title: Authentication configuration
+description: Set up NextAuth.js authentication with credentials and Google OAuth
+---
+
+Invoice Generator uses [NextAuth.js v5](https://authjs.dev) (next-auth beta) for authentication, supporting both credentials-based login and Google OAuth.
+
+## Authentication providers
+
+The application supports two authentication methods:
+
+1. **Credentials** - Email and password authentication
+2. **Google OAuth** - Sign in with Google
+
+## Configuration files
+
+### Edge-compatible config
+
+The `auth.config.ts` file provides edge-compatible configuration for middleware:
+
+```typescript auth.config.ts
+import type { NextAuthConfig } from "next-auth";
+import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
+
+export const authConfig = {
+  session: { strategy: "jwt" },
+  pages: {
+    signIn: "/sign-in",
+  },
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      checks: ["state"],
+    }),
+    // Stub — real authorize() logic is in auth.ts
+    Credentials({}),
+  ],
+  callbacks: {
+    authorized({ auth }) {
+      return !!auth?.user;
+    },
+  },
+} satisfies NextAuthConfig;
+```
+
+Reference: `auth.config.ts:1-29`
+
+<Note>
+  This configuration is edge-compatible and used by middleware. It cannot import Node.js-only packages like bcrypt or database clients.
+</Note>
+
+### Full authentication config
+
+The `auth.ts` file extends the edge config with full provider implementations:
+
+```typescript auth.ts
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
+import bcrypt from "bcryptjs";
+import db from "@/app/lib/turso";
+import { authConfig } from "./auth.config";
+
+export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
+  
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      checks: ["state"],
+    }),
+    
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+        
+        const result = await db.execute({
+          sql: "SELECT id, name, email, image, password FROM users WHERE email = ? LIMIT 1",
+          args: [credentials.email as string],
+        });
+        
+        const user = result.rows[0];
+        if (!user || !user.password) return null;
+        
+        const isValid = await bcrypt.compare(
+          credentials.password as string,
+          user.password
+        );
+        if (!isValid) return null;
+        
+        return { id: user.id, name: user.name, email: user.email, image: user.image };
+      },
+    }),
+  ],
+});
+```
+
+Reference: `auth.ts:1-44`
+
+## Environment variables
+
+Configure these environment variables in your `.env.local` file:
+
+```bash
+# Required for NextAuth.js
+AUTH_SECRET=your-secret-key-here
+
+# Optional: Google OAuth
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+### Generate AUTH_SECRET
+
+The `AUTH_SECRET` is used to encrypt session tokens and sign cookies:
+
+```bash
+openssl rand -base64 32
+```
+
+<Warning>
+  Never commit your `AUTH_SECRET` to version control. Generate a new secret for each environment.
+</Warning>
+
+### Google OAuth setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create a new project or select an existing one
+3. Enable the Google+ API
+4. Go to Credentials → Create Credentials → OAuth 2.0 Client ID
+5. Configure the OAuth consent screen
+6. Add authorized redirect URIs:
+   - Development: `http://localhost:3000/api/auth/callback/google`
+   - Production: `https://yourdomain.com/api/auth/callback/google`
+7. Copy the Client ID and Client Secret to your `.env.local`
+
+Reference: `auth.ts:13-17`, `auth.config.ts:16-20`
+
+## Session strategy
+
+The application uses JWT-based sessions:
+
+```typescript
+session: { strategy: "jwt" }
+```
+
+Reference: `auth.config.ts:11`
+
+<Note>
+  JWT sessions are stored in cookies and don't require database lookups for each request, making them faster and more scalable.
+</Note>
+
+## Callbacks
+
+### JWT callback
+
+The JWT callback handles user creation and token enrichment:
+
+```typescript auth.ts
+async jwt({ token, user, account }) {
+  if (user && account) {
+    if (account.provider === "google") {
+      // Check if user exists
+      const result = await db.execute({
+        sql: "SELECT id, name, image FROM users WHERE email = ? LIMIT 1",
+        args: [user.email ?? null],
+      });
+      
+      const existing = result.rows[0];
+      
+      if (!existing) {
+        // Create new user
+        const id = crypto.randomUUID();
+        await db.execute({
+          sql: `INSERT INTO users (id, name, email, emailVerified, image, password, created_at)
+                VALUES (?, ?, ?, datetime('now'), ?, NULL, datetime('now'))`,
+          args: [id, user.name ?? null, user.email ?? null, user.image ?? null],
+        });
+        token.id = id;
+      } else {
+        // Update existing user
+        token.id = existing.id;
+        await db.execute({
+          sql: "UPDATE users SET name = COALESCE(name, ?), image = COALESCE(image, ?) WHERE id = ?",
+          args: [user.name ?? null, user.image ?? null, existing.id],
+        });
+      }
+    } else {
+      token.id = user.id;
+    }
+  }
+  return token;
+}
+```
+
+Reference: `auth.ts:50-82`
+
+**Flow:**
+
+1. On Google sign-in, check if user exists by email
+2. If new user, create account with `emailVerified` set to current time
+3. If existing user, update name and image if they're null
+4. For credentials sign-in, use the user ID from the authorize function
+
+### Session callback
+
+The session callback adds the user ID to the session:
+
+```typescript auth.ts
+session({ session, token }) {
+  if (token.id) session.user.id = token.id as string;
+  return session;
+}
+```
+
+Reference: `auth.ts:84-87`
+
+### Authorized callback
+
+The authorized callback protects routes in middleware:
+
+```typescript auth.config.ts
+authorized({ auth }) {
+  return !!auth?.user;
+}
+```
+
+Reference: `auth.config.ts:25-27`
+
+## Middleware
+
+The middleware protects all routes except public pages:
+
+```typescript middleware.ts
+import NextAuth from "next-auth";
+import { authConfig } from "@/auth.config";
+
+const { auth } = NextAuth(authConfig);
+
+export default auth;
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico|$|sign-in|sign-up|api/auth).*)",
+  ],
+};
+```
+
+Reference: `middleware.ts:1-12`
+
+**Protected routes:** All routes except:
+- Static files (`_next/static`, `_next/image`)
+- Favicon
+- Root path
+- `/sign-in` and `/sign-up`
+- `/api/auth/*` (NextAuth.js endpoints)
+
+## Credentials authentication
+
+The credentials provider validates email and password:
+
+```typescript auth.ts
+Credentials({
+  credentials: {
+    email: { label: "Email", type: "email" },
+    password: { label: "Password", type: "password" },
+  },
+  async authorize(credentials) {
+    if (!credentials?.email || !credentials?.password) return null;
+    
+    const result = await db.execute({
+      sql: "SELECT id, name, email, image, password FROM users WHERE email = ? LIMIT 1",
+      args: [credentials.email as string],
+    });
+    
+    const user = result.rows[0];
+    if (!user || !user.password) return null;
+    
+    const isValid = await bcrypt.compare(
+      credentials.password as string,
+      user.password
+    );
+    if (!isValid) return null;
+    
+    return { id: user.id, name: user.name, email: user.email, image: user.image };
+  },
+})
+```
+
+Reference: `auth.ts:19-43`
+
+**Flow:**
+
+1. Validate that email and password are provided
+2. Query database for user by email
+3. Return null if user not found or password is null (OAuth users)
+4. Compare provided password with hashed password using bcrypt
+5. Return user object if password is valid
+
+## User registration
+
+The registration endpoint creates new user accounts:
+
+```typescript app/api/auth/register/route.ts
+export async function POST(request: NextRequest) {
+  const { name, email, password } = await request.json();
+  
+  // Validation
+  if (!name || !email || !password) {
+    return NextResponse.json(
+      { error: "Name, email and password are required." },
+      { status: 400 }
+    );
+  }
+  if (password.length < 8) {
+    return NextResponse.json(
+      { error: "Password must be at least 8 characters." },
+      { status: 400 }
+    );
+  }
+  
+  // Check if user exists
+  const existing = await db.execute({
+    sql: "SELECT id FROM users WHERE email = ? LIMIT 1",
+    args: [email],
+  });
+  if (existing.rows.length > 0) {
+    return NextResponse.json(
+      { error: "An account with this email already exists." },
+      { status: 409 }
+    );
+  }
+  
+  // Create user
+  const hashedPassword = await bcrypt.hash(password, 12);
+  const id = crypto.randomUUID();
+  
+  await db.execute({
+    sql: `INSERT INTO users (id, name, email, password, created_at)
+          VALUES (?, ?, ?, ?, datetime('now'))`,
+    args: [id, name, email, hashedPassword],
+  });
+  
+  return NextResponse.json(
+    { message: "Account created successfully." },
+    { status: 201 }
+  );
+}
+```
+
+Reference: `app/api/auth/register/route.ts:5-59`
+
+**Validation:**
+
+- Name, email, and password are required
+- Password must be at least 8 characters
+- Email must be valid format
+- Email must be unique
+
+**Password hashing:**
+
+```typescript
+const hashedPassword = await bcrypt.hash(password, 12);
+```
+
+Reference: `app/api/auth/register/route.ts:39`
+
+Bcrypt uses 12 salt rounds for secure password hashing.
+
+## Custom sign-in page
+
+The application uses a custom sign-in page:
+
+```typescript auth.config.ts
+pages: {
+  signIn: "/sign-in",
+}
+```
+
+Reference: `auth.config.ts:12-14`
+
+Users are redirected to `/sign-in` when authentication is required.
+
+## Security best practices
+
+<Warning>
+  Follow these security guidelines to protect user accounts:
+</Warning>
+
+1. **Strong AUTH_SECRET** - Use a cryptographically secure random value
+2. **HTTPS in production** - Always use HTTPS for production deployments
+3. **Secure cookies** - NextAuth.js automatically uses secure cookies in production
+4. **Password requirements** - Enforce minimum 8 characters (consider adding complexity requirements)
+5. **Rate limiting** - Add rate limiting to sign-in and registration endpoints
+6. **Email verification** - Consider adding email verification for new accounts
+7. **OAuth redirect URIs** - Only whitelist your actual domains in Google Cloud Console
+
+## Accessing the session
+
+### Server components
+
+```typescript
+import { auth } from "@/auth";
+
+export default async function Page() {
+  const session = await auth();
+  
+  if (!session?.user) {
+    // User not authenticated
+  }
+  
+  return <div>Welcome {session.user.name}</div>;
+}
+```
+
+### Server actions
+
+```typescript
+import { auth } from "@/auth";
+
+export async function myAction() {
+  const session = await auth();
+  
+  if (!session?.user) {
+    throw new Error("Not authenticated");
+  }
+  
+  // Use session.user.id for queries
+}
+```
+
+### API routes
+
+```typescript
+import { auth } from "@/auth";
+
+export async function GET() {
+  const session = await auth();
+  
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  
+  // Handle request
+}
+```
+
+## Sign out
+
+Users can sign out using the `signOut` function:
+
+```typescript
+import { signOut } from "@/auth";
+
+await signOut();
+```
+
+This clears the session cookie and redirects to the home page.
+
+## Troubleshooting
+
+### OAuth callback errors
+
+If Google OAuth fails with callback errors:
+
+1. Verify redirect URIs in Google Cloud Console match exactly
+2. Check that `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are correct
+3. Ensure the OAuth consent screen is configured
+4. Verify your domain is authorized in Google Cloud Console
+
+### Session not persisting
+
+If sessions don't persist:
+
+1. Check that `AUTH_SECRET` is set
+2. Verify cookies are enabled in the browser
+3. Ensure you're using HTTPS in production
+4. Check browser console for cookie errors
+
+### Credentials sign-in fails
+
+If email/password sign-in fails:
+
+1. Verify the user exists in the database
+2. Check that the password was hashed with bcrypt
+3. Ensure the password field is not NULL (OAuth users have NULL passwords)
+4. Test password comparison manually
+
+### Middleware redirect loops
+
+If you get redirect loops:
+
+1. Check that `/sign-in` is excluded in middleware matcher
+2. Verify `authorized` callback returns true for authenticated users
+3. Ensure the sign-in page doesn't require authentication

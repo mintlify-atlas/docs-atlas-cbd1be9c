@@ -1,0 +1,549 @@
+---
+title: Self-hosted deployment
+description: Deploy Invoice Generator to your own infrastructure using Docker or Node.js
+---
+
+Self-hosting gives you complete control over your Invoice Generator deployment. This guide covers deployment using Docker and traditional Node.js hosting.
+
+## Deployment methods
+
+<CardGroup cols={2}>
+  <Card title="Docker" icon="docker">
+    Recommended for containerized environments
+  </Card>
+  <Card title="Node.js" icon="node-js">
+    Direct deployment to VPS or bare metal
+  </Card>
+</CardGroup>
+
+## Prerequisites
+
+Before deploying:
+
+- Node.js 20 or later installed
+- Turso database created and accessible
+- Google OAuth credentials configured
+- Server with at least 512MB RAM
+- Domain with SSL certificate (recommended)
+
+## Docker deployment
+
+### Create Dockerfile
+
+Create a `Dockerfile` in your project root:
+
+```dockerfile
+FROM node:20-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Next.js collects anonymous telemetry data about general usage.
+# Disable by uncommenting the following line:
+# ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm run build
+
+# Production image, copy all the files and run next
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+# ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
+
+# Automatically leverage output traces to reduce image size
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]
+```
+
+### Update Next.js config
+
+Modify `next.config.ts` to enable standalone output:
+
+```typescript
+const nextConfig: NextConfig = {
+  output: 'standalone', // Add this line
+  turbopack: {
+    root: ".",
+  },
+  serverExternalPackages: ["bcryptjs"],
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+      },
+    ],
+  },
+};
+```
+
+### Build and run container
+
+<Steps>
+  <Step title="Build Docker image">
+    ```bash
+    docker build -t invoice-generator .
+    ```
+  </Step>
+  
+  <Step title="Create environment file">
+    Create `.env.production` with required variables:
+    
+    ```bash
+    TURSO_DATABASE_URL=libsql://your-database.turso.io
+    TURSO_AUTH_TOKEN=your-auth-token
+    AUTH_SECRET=your-generated-secret
+    GOOGLE_CLIENT_ID=your-client-id
+    GOOGLE_CLIENT_SECRET=your-client-secret
+    ```
+  </Step>
+  
+  <Step title="Run database migration">
+    ```bash
+    docker run --env-file .env.production invoice-generator \
+      node scripts/migrate.mjs
+    ```
+    
+    This runs `scripts/migrate.mjs:1-27` to create database schema from `app/lib/schema.sql`.
+  </Step>
+  
+  <Step title="Start container">
+    ```bash
+    docker run -d \
+      --name invoice-generator \
+      --env-file .env.production \
+      -p 3000:3000 \
+      --restart unless-stopped \
+      invoice-generator
+    ```
+  </Step>
+</Steps>
+
+### Docker Compose
+
+For easier management, use Docker Compose. Create `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+```
+
+Deploy with:
+
+```bash
+docker-compose up -d
+```
+
+## Node.js deployment
+
+### Standard deployment
+
+<Steps>
+  <Step title="Clone repository">
+    ```bash
+    git clone <your-repository>
+    cd invoice-generator
+    ```
+  </Step>
+  
+  <Step title="Install dependencies">
+    ```bash
+    npm ci --production=false
+    ```
+  </Step>
+  
+  <Step title="Set environment variables">
+    Create `.env.production` with all required variables. See [environment variables reference](/deployment/environment-variables).
+  </Step>
+  
+  <Step title="Run database migration">
+    ```bash
+    node --env-file=.env.production scripts/migrate.mjs
+    ```
+    
+    This creates all tables defined in the schema (`app/lib/schema.sql:1-110`).
+  </Step>
+  
+  <Step title="Build application">
+    ```bash
+    npm run build
+    ```
+    
+    Build command from `package.json:7` runs `next build`.
+  </Step>
+  
+  <Step title="Start production server">
+    ```bash
+    NODE_ENV=production npm start
+    ```
+    
+    Or load environment variables explicitly:
+    
+    ```bash
+    node --env-file=.env.production node_modules/next/dist/bin/next start
+    ```
+  </Step>
+</Steps>
+
+### Process manager (PM2)
+
+Use PM2 for production process management:
+
+```bash
+npm install -g pm2
+```
+
+Create `ecosystem.config.js`:
+
+```javascript
+module.exports = {
+  apps: [{
+    name: 'invoice-generator',
+    script: 'node_modules/next/dist/bin/next',
+    args: 'start',
+    instances: 'max',
+    exec_mode: 'cluster',
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3000,
+    },
+    env_file: '.env.production',
+    error_file: './logs/err.log',
+    out_file: './logs/out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+  }],
+};
+```
+
+Start with PM2:
+
+```bash
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup
+```
+
+## Reverse proxy configuration
+
+### Nginx
+
+Configure Nginx as a reverse proxy with SSL:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # Cache static assets
+    location /_next/static {
+        proxy_pass http://localhost:3000;
+        proxy_cache_valid 60m;
+        add_header Cache-Control "public, max-age=3600, immutable";
+    }
+}
+```
+
+Reload Nginx:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### Caddy
+
+Caddy provides automatic HTTPS with Let's Encrypt:
+
+```caddyfile
+your-domain.com {
+    reverse_proxy localhost:3000
+    
+    encode gzip
+    
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+    }
+}
+```
+
+## System service (systemd)
+
+Create systemd service for automatic startup:
+
+```ini
+[Unit]
+Description=Invoice Generator
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/invoice-generator
+EnvironmentFile=/var/www/invoice-generator/.env.production
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl enable invoice-generator
+sudo systemctl start invoice-generator
+sudo systemctl status invoice-generator
+```
+
+## Health monitoring
+
+### Simple health check
+
+Create a health check endpoint or use Next.js directly:
+
+```bash
+curl http://localhost:3000
+```
+
+### Uptime monitoring
+
+Use tools like:
+- **UptimeRobot** - Free tier available
+- **Cronitor** - Health checks and alerts
+- **Custom script** - Simple cron job with curl
+
+## Database considerations
+
+<Warning>
+Always use Turso auth tokens in production for secure database access.
+</Warning>
+
+The application connects to Turso via `app/lib/turso.ts:1-9`:
+
+```typescript
+const db = createClient({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+```
+
+For optimal performance:
+- Use Turso edge replicas near your server location
+- Enable connection pooling if running multiple instances
+- Monitor database response times
+
+## Backup strategy
+
+Implement regular backups:
+
+```bash
+# Turso provides automatic backups, but you can export manually
+turso db shell <your-database> '.dump' > backup-$(date +%Y%m%d).sql
+```
+
+Schedule with cron:
+
+```bash
+0 2 * * * /path/to/backup-script.sh
+```
+
+## Security hardening
+
+<Steps>
+  <Step title="Firewall configuration">
+    ```bash
+    # Allow only necessary ports
+    sudo ufw allow 22/tcp   # SSH
+    sudo ufw allow 80/tcp   # HTTP
+    sudo ufw allow 443/tcp  # HTTPS
+    sudo ufw enable
+    ```
+  </Step>
+  
+  <Step title="Limit file permissions">
+    ```bash
+    chmod 600 .env.production
+    chown www-data:www-data /var/www/invoice-generator
+    ```
+  </Step>
+  
+  <Step title="Enable automatic updates">
+    ```bash
+    sudo apt install unattended-upgrades
+    sudo dpkg-reconfigure -plow unattended-upgrades
+    ```
+  </Step>
+  
+  <Step title="Configure OAuth redirect URI">
+    Add your domain to Google OAuth settings:
+    
+    ```
+    https://your-domain.com/api/auth/callback/google
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Application won't start
+
+**Check logs:**
+```bash
+# Docker
+docker logs invoice-generator
+
+# PM2
+pm2 logs invoice-generator
+
+# Systemd
+sudo journalctl -u invoice-generator -n 50
+```
+
+**Common issues:**
+1. Missing environment variables - verify `.env.production`
+2. Port already in use - check with `lsof -i :3000`
+3. Build artifacts missing - run `npm run build` again
+
+### Database connection fails
+
+Verify connectivity:
+```bash
+# Test database connection
+node -e "require('@libsql/client').createClient({url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN}).execute('SELECT 1')"
+```
+
+Check:
+1. `TURSO_DATABASE_URL` format is correct
+2. `TURSO_AUTH_TOKEN` is valid and not expired
+3. Server can reach Turso endpoints (check firewall)
+
+### High memory usage
+
+Optimize with:
+```javascript
+// In ecosystem.config.js for PM2
+max_memory_restart: '500M',
+node_args: '--max-old-space-size=512',
+```
+
+## Monitoring and logging
+
+Set up centralized logging:
+
+```bash
+# Install winston for application logging
+npm install winston
+```
+
+Monitor system resources:
+```bash
+# CPU and memory
+htop
+
+# Disk usage
+df -h
+
+# Network connections
+netstat -tulpn | grep 3000
+```
+
+## Updates and maintenance
+
+Update the application:
+
+```bash
+git pull origin main
+npm ci
+npm run build
+pm2 restart invoice-generator
+# or
+sudo systemctl restart invoice-generator
+```
+
+<Note>
+Always test updates in a staging environment before deploying to production.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Environment variables" icon="key" href="/deployment/environment-variables">
+    Complete reference for all environment variables
+  </Card>
+  <Card title="Vercel deployment" icon="rocket" href="/deployment/vercel">
+    Managed deployment alternative
+  </Card>
+</CardGroup>

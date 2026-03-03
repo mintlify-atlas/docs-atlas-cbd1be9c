@@ -1,0 +1,451 @@
+---
+title: Multi-currency support
+description: Working with multiple currencies in Invoice Generator
+---
+
+Invoice Generator supports 11 international currencies with automatic formatting and conversion-ready invoicing. This guide covers currency selection, formatting, and best practices for international invoicing.
+
+## Supported currencies
+
+The system supports the following currencies (from `InvoiceForm.tsx:89-101`):
+
+```typescript
+const CURRENCIES = [
+  { code: "USD", label: "US Dollar" },
+  { code: "EUR", label: "Euro" },
+  { code: "GBP", label: "British Pound" },
+  { code: "CAD", label: "Canadian Dollar" },
+  { code: "AUD", label: "Australian Dollar" },
+  { code: "JPY", label: "Japanese Yen" },
+  { code: "CHF", label: "Swiss Franc" },
+  { code: "CNY", label: "Chinese Yuan" },
+  { code: "INR", label: "Indian Rupee" },
+  { code: "MXN", label: "Mexican Peso" },
+  { code: "NGN", label: "Nigerian Naira" },
+];
+```
+
+These currencies cover:
+- North America (USD, CAD, MXN)
+- Europe (EUR, GBP, CHF)
+- Asia-Pacific (JPY, CNY, INR, AUD)
+- Africa (NGN)
+
+## Setting your default currency
+
+Your default currency is automatically selected for new invoices.
+
+<Steps>
+  <Step title="Navigate to company settings">
+    Go to `/company` to access the Company Settings page.
+  </Step>
+
+  <Step title="Find the default currency section">
+    The **Default Currency** card appears near the top of the page with the description:
+    > "Used as the default currency when creating new invoices."
+  </Step>
+
+  <Step title="Select your currency">
+    Open the dropdown and choose your primary business currency.
+
+    ```typescript
+    // Currency selector from company/page.tsx:171-182
+    <Select value={defaultCurrency} onValueChange={setDefaultCurrency}>
+      <SelectTrigger className="w-64">
+        <SelectValue placeholder="Select currency" />
+      </SelectTrigger>
+      <SelectContent>
+        {CURRENCIES.map((c) => (
+          <SelectItem key={c.code} value={c.code}>
+            {c.label} ({c.code})
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+    ```
+  </Step>
+
+  <Step title="Save the setting">
+    Click **Save** to store your preference. The button shows "Saved!" for 2 seconds to confirm.
+
+    This setting is stored in the settings table:
+    ```sql
+    CREATE TABLE settings (
+      id               TEXT NOT NULL PRIMARY KEY DEFAULT 'default',
+      default_currency TEXT NOT NULL DEFAULT 'GBP',
+      updated_at       TEXT NOT NULL
+    );
+    ```
+  </Step>
+</Steps>
+
+## Selecting currency for an invoice
+
+When creating an invoice, you can override the default currency:
+
+1. **Open the invoice form** at `/invoices/create`
+2. **Locate the Currency field** in the Invoice Details section
+3. **Select a currency** from the dropdown
+4. All amounts on the invoice automatically format for the selected currency
+
+```typescript
+// Currency initialization from InvoiceForm.tsx:152-162
+useEffect(() => {
+  (async () => {
+    const [storedCustomers, settings] = await Promise.all([
+      getCustomers(),
+      getSettings(),
+    ]);
+    setCustomers(storedCustomers);
+    if (!initialData) {
+      setFormData((prev) => ({ ...prev, currency: settings.defaultCurrency }));
+    }
+  })();
+}, []);
+```
+
+<Note>
+  The currency is set at the invoice level and stored with the invoice. Each invoice can use a different currency.
+</Note>
+
+## Currency formatting
+
+All monetary values are automatically formatted using the Intl.NumberFormat API based on the selected currency.
+
+### Formatting implementation
+
+The `formatCurrency` function (from `app/lib/invoice.ts:50-70`) handles all currency display:
+
+```typescript
+export function formatCurrency(
+  amount: number,
+  currency: string = "USD"
+): string {
+  // Handle NaN and invalid values
+  if (isNaN(amount)) {
+    return `$0.00`;
+  }
+
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch (error) {
+    // Fallback if currency is invalid
+    return `${amount.toFixed(2)} ${currency}`;
+  }
+}
+```
+
+### Formatting examples
+
+The same amount (1234.56) formats differently per currency:
+
+| Currency | Code | Formatted Output |
+|----------|------|------------------|
+| US Dollar | USD | $1,234.56 |
+| Euro | EUR | €1,234.56 |
+| British Pound | GBP | £1,234.56 |
+| Japanese Yen | JPY | ¥1,235 |
+| Swiss Franc | CHF | CHF 1,234.56 |
+| Indian Rupee | INR | ₹1,234.56 |
+
+<Note>
+  Japanese Yen (JPY) automatically formats without decimal places since yen doesn't use fractional units.
+</Note>
+
+## How currency affects invoices
+
+Currency selection impacts several areas:
+
+### Line item amounts
+
+All line item calculations use the invoice currency:
+
+```typescript
+// Amount display from InvoiceForm.tsx:616-621
+<div className="flex items-end justify-end px-3 py-2 text-right font-semibold">
+  {formatCurrency(
+    (item.quantity || 0) * (item.rate || 0),
+    formData.currency
+  )}
+</div>
+```
+
+### Invoice totals
+
+The summary section formats all totals with the invoice currency:
+
+- Subtotal
+- Discount amounts
+- Tax amount
+- Total amount
+
+```typescript
+// Summary display from InvoiceForm.tsx:664-692
+<div className="space-y-2 border-t pt-4">
+  <div className="flex justify-between text-sm">
+    <span className="text-(--muted)">Subtotal:</span>
+    <span className="font-medium">
+      {formatCurrency(summary.subtotal, formData.currency)}
+    </span>
+  </div>
+  {summary.taxAmount > 0 && (
+    <div className="flex justify-between text-sm">
+      <span className="text-(--muted)">Tax ({formData.taxRate}%):</span>
+      <span className="font-medium">
+        {formatCurrency(summary.taxAmount, formData.currency)}
+      </span>
+    </div>
+  )}
+  <div className="flex justify-between border-t pt-2 text-lg font-bold">
+    <span>Total:</span>
+    <span>{formatCurrency(summary.total, formData.currency)}</span>
+  </div>
+</div>
+```
+
+### Database storage
+
+Currency is stored as a text field with the invoice:
+
+```sql
+CREATE TABLE invoices (
+  -- ... other fields
+  currency TEXT NOT NULL DEFAULT 'GBP',
+  -- ... other fields
+);
+```
+
+The invoice stores the currency code ("USD", "EUR", etc.) not the symbol.
+
+## Currency and payment accounts
+
+When setting up payment accounts, you can specify which currency each account accepts.
+
+### Creating currency-specific accounts
+
+<Steps>
+  <Step title="Navigate to account details">
+    Go to `/account` to access payment account settings.
+  </Step>
+
+  <Step title="Create a new account">
+    Click **+ Add Account** and fill in your bank details.
+  </Step>
+
+  <Step title="Specify the currency">
+    In the **Currency** field (optional), enter the currency code:
+    - "GBP" for British Pound accounts
+    - "USD" for US Dollar accounts
+    - "EUR" for Euro accounts
+    - etc.
+
+    This helps customers know which currency to send.
+  </Step>
+
+  <Step title="Set as default for that currency">
+    Consider creating multiple accounts:
+    - USD account for American clients
+    - EUR account for European clients
+    - GBP account for UK clients
+  </Step>
+</Steps>
+
+<Tip>
+  Create separate payment account profiles for each currency you regularly invoice in. This prevents confusion and helps customers send the correct currency.
+</Tip>
+
+## Multi-currency best practices
+
+### Matching invoice and payment currencies
+
+<Warning>
+  Always ensure your invoice currency matches the currency of the payment account you're providing. Mismatches cause conversion issues and fees.
+</Warning>
+
+**Example: USD invoice**
+```
+Invoice Currency: USD
+Total: $5,000.00
+
+Payment Account:
+  Bank: Chase Bank (US)
+  Currency: USD
+  Account Number: 123456789
+```
+
+**Example: EUR invoice**
+```
+Invoice Currency: EUR
+Total: €4,200.00
+
+Payment Account:
+  Bank: BNP Paribas
+  Currency: EUR
+  IBAN: FR14 2004 1010 0505 0001 3M02 606
+```
+
+### Currency conversion considerations
+
+<Note>
+  Invoice Generator does NOT perform currency conversion. It displays amounts in the selected currency but doesn't convert between currencies.
+</Note>
+
+If you need to invoice a client in a different currency than your bank account:
+
+1. **Calculate the amount** in the target currency before creating the invoice
+2. **Create the invoice** in the customer's preferred currency
+3. **Provide payment instructions** that account for conversion:
+   - Specify "Amount must be paid in EUR"
+   - Note "Conversion fees to be paid by sender"
+   - Indicate "Exact amount in USD to be calculated at time of payment"
+
+### Tax considerations
+
+Tax rates work the same across all currencies:
+
+- Tax rate is entered as a percentage (e.g., 20%)
+- Tax amount is calculated on the subtotal
+- Tax amount is formatted in the invoice currency
+
+```typescript
+// Tax calculation is currency-agnostic
+const taxRate = item.taxRate ?? globalTaxRate;
+taxAmount += (itemTaxBase * taxRate) / 100;
+```
+
+<Tip>
+  Be aware of different tax names and rates across currencies/countries:
+  - UK: VAT at 20%
+  - US: Sales tax varies by state (0-10%)
+  - EU: VAT varies by country (17-27%)
+  - Australia: GST at 10%
+</Tip>
+
+### Regional formatting differences
+
+The Intl.NumberFormat API handles regional differences automatically:
+
+**Decimal separators:**
+- English locale: `1,234.56` (comma thousands, period decimal)
+- Many EU locales: `1.234,56` (period thousands, comma decimal)
+
+**Currency symbol placement:**
+- Most currencies: Symbol before amount ($100)
+- Some currencies: Symbol after amount (100₹)
+
+The system uses "en-US" locale for consistency, but respects currency-specific symbol placement.
+
+## Common currency scenarios
+
+### Scenario 1: Freelancer with international clients
+
+**Setup:**
+- Default currency: USD (your local currency)
+- Payment accounts:
+  - USD account (default)
+  - EUR account for EU clients
+- Create invoices in client's preferred currency
+
+**Workflow:**
+1. UK client wants invoice in GBP
+2. Create invoice, select GBP currency
+3. Enter amount in GBP
+4. Include your GBP account details (or note conversion will occur)
+5. Customer pays in GBP
+
+### Scenario 2: Company operating in multiple regions
+
+**Setup:**
+- Multiple company profiles (US office, EU office, UK office)
+- Currency set per region
+- Separate payment accounts per currency
+
+**Workflow:**
+1. Select appropriate company profile
+2. Currency defaults to that region
+3. Use matching payment account
+4. Generate invoice in local currency
+
+### Scenario 3: Single currency with international clients
+
+**Setup:**
+- Default currency: GBP
+- Single payment account in GBP
+- All invoices in GBP regardless of client location
+
+**Workflow:**
+1. Create invoice in GBP
+2. Add note: "Payment must be made in GBP. Conversion fees to be paid by sender."
+3. Client handles currency conversion at their bank
+
+## Troubleshooting
+
+### Invalid currency errors
+
+If you see incorrectly formatted amounts:
+
+```typescript
+// Fallback formatting when currency code is invalid
+return `${amount.toFixed(2)} ${currency}`;
+```
+
+This means the currency code isn't recognized by Intl.NumberFormat. Ensure you're using standard ISO 4217 codes (USD, EUR, GBP, etc.).
+
+### Rounding differences
+
+All amounts use 2 decimal places (except JPY):
+
+```typescript
+minimumFractionDigits: 2,
+maximumFractionDigits: 2,
+```
+
+This can cause small rounding differences in calculations. The system is consistent, but be aware when comparing to manual calculations.
+
+### Currency symbol not displaying
+
+If currency symbols don't display:
+- Check browser font support for special symbols (₹, ¥, etc.)
+- Verify the currency code is spelled correctly
+- Ensure browser supports Intl API (all modern browsers do)
+
+## Database storage
+
+Currency information is stored in two places:
+
+**Default currency (settings table):**
+```sql
+INSERT OR IGNORE INTO settings (id, default_currency, updated_at)
+VALUES ('default', 'GBP', datetime('now'));
+```
+
+**Invoice currency (invoices table):**
+```sql
+CREATE TABLE invoices (
+  -- ...
+  currency TEXT NOT NULL DEFAULT 'GBP',
+  -- ...
+);
+```
+
+**Account currency (account_details table):**
+```sql
+CREATE TABLE account_details (
+  -- ...
+  currency TEXT,
+  -- ...
+);
+```
+
+All are stored as ISO 4217 currency codes (text strings).
+
+## Next steps
+
+- Learn how to [create invoices](/guides/creating-invoices) in different currencies
+- Set up [payment accounts](/guides/payment-details) for multiple currencies
+- Configure your [company profile](/guides/company-setup) and default currency

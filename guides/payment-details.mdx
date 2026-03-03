@@ -1,0 +1,392 @@
+---
+title: Payment details
+description: Configure bank account and payment information to include on your invoices
+---
+
+Payment details tell your customers where and how to send payment. This guide covers setting up bank account information, international payment details, and managing multiple payment accounts.
+
+## Account details structure
+
+Payment account details are defined with the following structure (from `app/lib/types.ts:64-79`):
+
+```typescript
+interface AccountDetails {
+  id: string;
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  sortCode?: string;        // UK banking
+  routingNumber?: string;   // US banking
+  iban?: string;           // International
+  swiftBic?: string;       // International
+  currency?: string;
+  paymentReference?: string;
+  notes?: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## Accessing account settings
+
+Navigate to `/account` to access the account details page. This page allows you to:
+- Create multiple payment account profiles
+- Set a default account for invoices
+- Include international payment details
+- Add payment instructions and notes
+
+## Adding your first payment account
+
+<Steps>
+  <Step title="Open the account form">
+    On the Account Details page:
+    - If no accounts exist, click **Add Account** in the empty state
+    - If accounts exist, click **+ Add Account** above the account list
+  </Step>
+
+  <Step title="Enter basic account information">
+    Fill in the required fields:
+
+    **Account Holder Name** (required)
+    - The name on the bank account
+    - Can be personal or business name
+    - Must match your bank records
+    - Example: "John Smith" or "Acme Corporation Ltd"
+
+    **Bank Name** (required)
+    - Full name of your bank or financial institution
+    - Examples: "Barclays Bank", "Chase Bank", "HSBC"
+
+    **Account Number** (required)
+    - Your bank account number
+    - Format varies by country
+    - UK: Typically 8 digits
+    - US: Typically 9-12 digits
+
+    ```typescript
+    // Validation from account/page.tsx:72-80
+    const validate = () => {
+      const newErrors: Record<string, string> = {};
+      if (!formData.accountHolderName.trim())
+        newErrors.accountHolderName = "Account holder name is required";
+      if (!formData.bankName.trim()) 
+        newErrors.bankName = "Bank name is required";
+      if (!formData.accountNumber.trim())
+        newErrors.accountNumber = "Account number is required";
+      return newErrors;
+    };
+    ```
+  </Step>
+
+  <Step title="Add regional banking codes">
+    Depending on your bank's location, add the appropriate codes:
+
+    **Sort Code** (optional)
+    - Used in UK and Ireland
+    - Format: 6 digits (XX-XX-XX)
+    - Identifies the specific bank branch
+    - Example: "20-00-00"
+
+    **Routing Number** (optional)
+    - Used in US, Canada, and some other countries
+    - Also called ABA number or transit number
+    - Format: 9 digits
+    - Identifies the financial institution
+    - Example: "021000021"
+
+    <Note>
+      You typically need either a sort code (UK) or routing number (US), but not both. Include whichever is relevant for your banking region.
+    </Note>
+  </Step>
+
+  <Step title="Add international payment details">
+    For international payments, include:
+
+    **IBAN** (optional)
+    - International Bank Account Number
+    - Used primarily in Europe and many other countries
+    - Format varies by country (up to 34 characters)
+    - Example: "GB82 WEST 1234 5698 7654 32"
+
+    **SWIFT/BIC** (optional)
+    - SWIFT code or Bank Identifier Code
+    - Used for international wire transfers
+    - Format: 8 or 11 characters
+    - Example: "BARCGB22" or "BARCGB22XXX"
+
+    **Currency** (optional)
+    - The currency of the account
+    - Free text field
+    - Examples: "GBP", "USD", "EUR"
+    - Helps customers understand which currency to send
+
+    <Tip>
+      If you receive international payments, always include both IBAN and SWIFT/BIC codes. This ensures customers can make transfers from any country.
+    </Tip>
+  </Step>
+
+  <Step title="Add payment instructions">
+    Customize the payment experience:
+
+    **Payment Reference** (optional)
+    - Instructions for what customers should include with payment
+    - Helps you identify incoming payments
+    - Examples:
+      - "Please quote invoice number"
+      - "Include your company name"
+      - "Reference: ACME-INV"
+
+    **Notes** (optional)
+    - Additional payment instructions or terms
+    - Appears on the invoice
+    - Examples:
+      - "Payment due within 30 days"
+      - "Wire transfer fees to be paid by sender"
+      - "For international payments, please use SWIFT transfer"
+
+    ```typescript
+    // Notes field from account/page.tsx:254-261
+    <Textarea
+      label="Notes (optional)"
+      name="notes"
+      value={formData.notes}
+      onChange={handleInputChange}
+      placeholder="Any additional payment instructions..."
+      rows={3}
+    />
+    ```
+  </Step>
+
+  <Step title="Set as default account">
+    Check **"Set as default account"** to make this the default payment method on new invoices.
+
+    ```typescript
+    // Default checkbox from account/page.tsx:263-272
+    <label className="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        name="isDefault"
+        checked={formData.isDefault}
+        onChange={handleInputChange}
+        className="rounded border-(--border)"
+      />
+      <span className="text-(--muted)">Set as default account</span>
+    </label>
+    ```
+
+    Only one account can be default at a time.
+  </Step>
+
+  <Step title="Save the account">
+    Click **Save Account** to create the account profile.
+
+    The system:
+    - Generates a unique ID: `String(Date.now())`
+    - Sets creation and update timestamps
+    - Validates required fields
+    - Stores the account in the database
+
+    ```typescript
+    // Account creation from account/page.tsx:97-106
+    const created = await createAccount({
+      id: String(Date.now()),
+      ...formData,
+      createdAt: now,
+      updatedAt: now,
+    });
+    setAccounts((prev) => [...prev, created]);
+    ```
+  </Step>
+</Steps>
+
+## Managing multiple payment accounts
+
+You can create multiple payment account profiles for:
+
+- **Different currencies**: Separate accounts for USD, EUR, GBP, etc.
+- **Different banks**: Business account vs. personal account
+- **Different payment methods**: Wire transfer vs. ACH vs. international
+- **Client-specific accounts**: Special accounts for major clients
+
+### Changing the default account
+
+To set a different account as default:
+
+1. Find the account you want to make default
+2. Click the **star icon** in the account card
+3. The account is marked with a "Default" badge
+4. The previous default is automatically unmarked
+
+```typescript
+// Setting default from account/page.tsx:134-138
+const handleSetDefault = async (id: string) => {
+  if (await setDefaultAccount(id)) {
+    setAccounts((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })));
+  }
+};
+```
+
+## Editing payment accounts
+
+To update an existing account:
+
+1. **Click the edit icon** (pencil) on the account card
+2. The form opens with current account data
+3. **Make your changes**
+4. **Click "Update Account"** to save
+
+The account updates with a new `updatedAt` timestamp.
+
+<Note>
+  Editing an account does not affect existing invoices that already reference this account. They display the information that was current when the invoice was created.
+</Note>
+
+## Deleting payment accounts
+
+To remove an account:
+
+1. **Click the delete icon** (trash) on the account card
+2. **Confirm deletion**: "Delete this account profile?"
+3. The account is permanently removed
+
+<Warning>
+  Deleted accounts cannot be recovered. Make sure you no longer need the account information before deleting.
+</Warning>
+
+## Database structure
+
+Account details are stored in the database (from `app/lib/schema.sql:73-88`):
+
+```sql
+CREATE TABLE account_details (
+  id                  TEXT    NOT NULL PRIMARY KEY,
+  account_holder_name TEXT    NOT NULL,
+  bank_name           TEXT    NOT NULL,
+  account_number      TEXT    NOT NULL,
+  sort_code           TEXT,
+  routing_number      TEXT,
+  iban                TEXT,
+  swift_bic           TEXT,
+  currency            TEXT,
+  payment_reference   TEXT,
+  notes               TEXT,
+  is_default          INTEGER NOT NULL DEFAULT 0,
+  created_at          TEXT    NOT NULL,
+  updated_at          TEXT    NOT NULL
+);
+```
+
+**Key points:**
+- Only 3 fields are required: account holder name, bank name, account number
+- All regional and international codes are optional
+- `is_default` is stored as INTEGER (0 or 1) for SQLite compatibility
+- Text fields have no length limits
+
+## Account card display
+
+Each account appears in a detailed card showing:
+
+**Header:**
+- Account holder name (title)
+- Bank name (subtitle)
+- "Default" badge if applicable
+
+**Account details grid:**
+- Account Number
+- Sort Code (if provided)
+- Routing Number (if provided)
+- IBAN (if provided, displayed in monospace font)
+- SWIFT/BIC (if provided)
+- Currency (if provided)
+- Payment Reference (if provided, spans full width)
+- Notes (if provided, spans full width)
+
+**Action buttons:**
+- Star icon: Set as default (hidden for current default)
+- Pencil icon: Edit account
+- Trash icon: Delete account
+
+Empty state when no accounts exist:
+> "No account profiles yet. Add one to include payment details on your invoices."
+
+## International payment best practices
+
+<Tip>
+  **For UK clients**: Provide account number and sort code. IBAN is optional but helpful for EU clients.
+</Tip>
+
+<Tip>
+  **For US clients**: Provide account number and routing number. Include wire instructions if you accept wire transfers.
+</Tip>
+
+<Tip>
+  **For international clients**: Always provide IBAN and SWIFT/BIC code. Specify whether transfer fees should be paid by sender or shared.
+</Tip>
+
+<Tip>
+  **Multiple currencies**: If you invoice in multiple currencies, create separate account profiles for each currency to avoid confusion and conversion fees.
+</Tip>
+
+## Security considerations
+
+<Warning>
+  Account details are stored in your local database. While account numbers are necessary for payment, ensure your deployment environment is secure.
+</Warning>
+
+<Note>
+  The system does NOT validate bank account numbers, IBAN, or SWIFT codes for correctness. Double-check all details before saving to avoid payment delays.
+</Note>
+
+## Payment reference examples
+
+Good payment reference instructions:
+
+- ✅ "Please quote invoice number as reference"
+- ✅ "Include your company name and invoice date"
+- ✅ "Reference format: ACME-[Invoice Number]"
+- ✅ "Please use invoice number INV-XXXXX as payment reference"
+
+Avoid vague instructions:
+- ❌ "Include reference"
+- ❌ "Add details"
+- ❌ "See invoice"
+
+## Common account configurations
+
+### UK Business Account
+```
+Account Holder Name: Acme Corporation Ltd
+Bank Name: Barclays Bank PLC
+Account Number: 12345678
+Sort Code: 20-00-00
+IBAN: GB82 WEST 1234 5698 7654 32
+SWIFT/BIC: BARCGB22
+Currency: GBP
+```
+
+### US Business Account
+```
+Account Holder Name: Acme Corporation
+Bank Name: Chase Bank
+Account Number: 123456789012
+Routing Number: 021000021
+SWIFT/BIC: CHASUS33
+Currency: USD
+```
+
+### EU Business Account
+```
+Account Holder Name: Acme SARL
+Bank Name: BNP Paribas
+Account Number: 00123456789
+IBAN: FR14 2004 1010 0505 0001 3M02 606
+SWIFT/BIC: BNPAFRPP
+Currency: EUR
+```
+
+## Next steps
+
+- Learn how to [create invoices](/guides/creating-invoices) that include your payment details
+- Set up your [company profile](/guides/company-setup) for professional invoices
+- Configure [multi-currency support](/guides/currencies) for international clients

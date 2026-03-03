@@ -1,0 +1,109 @@
+---
+title: PDF generation
+description: Generate PDF versions of invoices
+---
+
+## Generate invoice PDF
+
+Generates a PDF document from an invoice. This endpoint is planned for future implementation.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-domain.com/api/pdf \
+  -H "Content-Type: application/json" \
+  -d '{
+    "invoiceId": "inv_123",
+    "fileName": "invoice-march-2026.pdf"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/pdf', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    invoiceId: 'inv_123',
+    fileName: 'invoice-march-2026.pdf'
+  })
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Body parameters
+
+<ParamField body="invoiceId" type="string" required>
+  The unique identifier of the invoice to convert to PDF
+</ParamField>
+
+<ParamField body="fileName" type="string">
+  Optional custom filename for the generated PDF. Defaults to `invoice-{invoiceId}.pdf`
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Information about the endpoint status
+</ResponseField>
+
+<ResponseField name="invoiceId" type="string">
+  The invoice ID that was requested
+</ResponseField>
+
+<ResponseField name="fileName" type="string">
+  The filename for the generated PDF
+</ResponseField>
+
+<ResponseField name="nextSteps" type="array">
+  Implementation steps for developers
+</ResponseField>
+
+```json 501 - Not implemented
+{
+  "message": "PDF generation not yet implemented",
+  "invoiceId": "inv_123",
+  "fileName": "invoice-march-2026.pdf",
+  "nextSteps": [
+    "1. Choose a PDF library (pdfkit, html2pdf, jsPDF, or puppeteer)",
+    "2. Install the library: npm install <library>",
+    "3. Create a template for the invoice layout",
+    "4. Generate PDF from invoice data",
+    "5. Return PDF file to client"
+  ]
+}
+```
+
+### Errors
+
+```json 400 - Invoice ID required
+{
+  "error": "Invoice ID is required"
+}
+```
+
+```json 500 - Internal server error
+{
+  "error": "Failed to generate PDF"
+}
+```
+
+## Implementation notes
+
+This endpoint is currently not implemented and returns a `501 Not Implemented` status. The following PDF libraries are recommended for implementation:
+
+- **pdfkit** - Low-level PDF generation with full control
+- **html2pdf.js** - Convert HTML to PDF (client-side)
+- **jsPDF** - JavaScript PDF generation library
+- **puppeteer** - Headless Chrome for complex PDF rendering
+
+The implementation should:
+
+1. Fetch the invoice data from your database or storage
+2. Generate a PDF using your chosen library with proper formatting
+3. Return the PDF as either a file download or base64-encoded string
+4. Handle errors appropriately
+
+See the source code at `app/api/pdf/route.ts:14-55` for the current implementation.

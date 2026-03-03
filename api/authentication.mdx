@@ -1,0 +1,320 @@
+---
+title: Authentication
+description: Secure your API with NextAuth.js session-based authentication
+---
+
+The Invoice Generator uses [NextAuth.js v5](https://authjs.dev) for authentication with support for both OAuth (Google) and credentials-based login.
+
+## Authentication setup
+
+Authentication is configured in two files:
+
+- `auth.config.ts` - Edge-compatible configuration for middleware
+- `auth.ts` - Full authentication setup with database integration
+
+### Configuration structure
+
+```typescript auth.config.ts
+import type { NextAuthConfig } from "next-auth";
+import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
+
+export const authConfig = {
+  session: { strategy: "jwt" },
+  pages: {
+    signIn: "/sign-in",
+  },
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      checks: ["state"],
+    }),
+    Credentials({}),
+  ],
+  callbacks: {
+    authorized({ auth }) {
+      return !!auth?.user;
+    },
+  },
+} satisfies NextAuthConfig;
+```
+
+## Authentication providers
+
+The application supports two authentication methods:
+
+### Google OAuth
+
+Users can sign in with their Google account:
+
+```typescript auth.ts
+Google({
+  clientId: process.env.GOOGLE_CLIENT_ID!,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+  checks: ["state"],
+})
+```
+
+<Note>
+When a user signs in with Google, the system automatically creates a new user record if one doesn't exist, or updates the existing user's name and image.
+</Note>
+
+### Credentials (Email/Password)
+
+Users can sign in with email and password using bcrypt for password hashing:
+
+```typescript auth.ts
+Credentials({
+  credentials: {
+    email: { label: "Email", type: "email" },
+    password: { label: "Password", type: "password" },
+  },
+  async authorize(credentials) {
+    if (!credentials?.email || !credentials?.password) return null;
+
+    const result = await db.execute({
+      sql: "SELECT id, name, email, image, password FROM users WHERE email = ? LIMIT 1",
+      args: [credentials.email as string],
+    });
+
+    const user = result.rows[0];
+    if (!user || !user.password) return null;
+
+    const isValid = await bcrypt.compare(
+      credentials.password as string, 
+      user.password
+    );
+    if (!isValid) return null;
+
+    return { 
+      id: user.id, 
+      name: user.name, 
+      email: user.email, 
+      image: user.image 
+    };
+  },
+})
+```
+
+## Session management
+
+The application uses JWT-based sessions stored in HTTP-only cookies.
+
+### JWT callback
+
+The JWT callback adds the user ID to the token and handles Google OAuth user creation:
+
+```typescript auth.ts
+async jwt({ token, user, account }) {
+  if (user && account) {
+    if (account.provider === "google") {
+      // Check if user exists
+      const result = await db.execute({
+        sql: "SELECT id, name, image FROM users WHERE email = ? LIMIT 1",
+        args: [user.email ?? null],
+      });
+
+      const existing = result.rows[0];
+
+      if (!existing) {
+        // Create new user
+        const id = crypto.randomUUID();
+        await db.execute({
+          sql: `INSERT INTO users (id, name, email, emailVerified, image, password, created_at)
+                VALUES (?, ?, ?, datetime('now'), ?, NULL, datetime('now'))`,
+          args: [id, user.name ?? null, user.email ?? null, user.image ?? null],
+        });
+        token.id = id;
+      } else {
+        token.id = existing.id;
+        // Update user info
+        await db.execute({
+          sql: "UPDATE users SET name = COALESCE(name, ?), image = COALESCE(image, ?) WHERE id = ?",
+          args: [user.name ?? null, user.image ?? null, existing.id],
+        });
+      }
+    } else {
+      token.id = user.id;
+    }
+  }
+  return token;
+}
+```
+
+### Session callback
+
+The session callback adds the user ID from the token to the session object:
+
+```typescript auth.ts
+session({ session, token }) {
+  if (token.id) session.user.id = token.id as string;
+  return session;
+}
+```
+
+## Protected routes
+
+The middleware protects all routes except public pages and API authentication endpoints:
+
+```typescript middleware.ts
+import NextAuth from "next-auth";
+import { authConfig } from "@/auth.config";
+
+const { auth } = NextAuth(authConfig);
+
+export default auth;
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico|$|sign-in|sign-up|api/auth).*)",
+  ],
+};
+```
+
+<Info>
+This matcher pattern protects all routes except:
+- Static files (`_next/static`, `_next/image`, `favicon.ico`)
+- Root path (`/`)
+- Authentication pages (`/sign-in`, `/sign-up`)
+- Authentication API routes (`/api/auth/*`)
+</Info>
+
+## User registration
+
+New users can register via the `/api/auth/register` endpoint:
+
+```typescript app/api/auth/register/route.ts
+export async function POST(request: NextRequest) {
+  const { name, email, password } = await request.json();
+
+  // Validation
+  if (!name || !email || !password) {
+    return NextResponse.json(
+      { error: "Name, email and password are required." },
+      { status: 400 }
+    );
+  }
+  if (password.length < 8) {
+    return NextResponse.json(
+      { error: "Password must be at least 8 characters." },
+      { status: 400 }
+    );
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json(
+      { error: "Invalid email address." },
+      { status: 400 }
+    );
+  }
+
+  // Check for existing user
+  const existing = await db.execute({
+    sql: "SELECT id FROM users WHERE email = ? LIMIT 1",
+    args: [email],
+  });
+  if (existing.rows.length > 0) {
+    return NextResponse.json(
+      { error: "An account with this email already exists." },
+      { status: 409 }
+    );
+  }
+
+  // Hash password and create user
+  const hashedPassword = await bcrypt.hash(password, 12);
+  const id = crypto.randomUUID();
+
+  await db.execute({
+    sql: `INSERT INTO users (id, name, email, password, created_at)
+          VALUES (?, ?, ?, ?, datetime('now'))`,
+    args: [id, name, email, hashedPassword],
+  });
+
+  return NextResponse.json(
+    { message: "Account created successfully." },
+    { status: 201 }
+  );
+}
+```
+
+## Accessing the session
+
+To access the current user session in your API routes:
+
+```typescript
+import { auth } from "@/auth";
+
+export async function GET() {
+  const session = await auth();
+  
+  if (!session?.user) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+  
+  const userId = session.user.id;
+  // Use userId to fetch user-specific data
+}
+```
+
+## Environment variables
+
+Required environment variables for authentication:
+
+```bash .env.local
+# NextAuth
+AUTH_SECRET=your-secret-key-here
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Database (Turso)
+TURSO_DATABASE_URL=your-database-url
+TURSO_AUTH_TOKEN=your-auth-token
+```
+
+<Warning>
+Generate a secure `AUTH_SECRET` using: `openssl rand -base64 32`
+</Warning>
+
+## Security features
+
+<AccordionGroup>
+  <Accordion title="Password hashing">
+    Passwords are hashed using bcrypt with a cost factor of 12:
+    
+    ```typescript
+    const hashedPassword = await bcrypt.hash(password, 12);
+    ```
+  </Accordion>
+  
+  <Accordion title="JWT sessions">
+    Sessions are stored as JWT tokens in HTTP-only cookies, preventing XSS attacks.
+  </Accordion>
+  
+  <Accordion title="CSRF protection">
+    NextAuth.js includes built-in CSRF protection with state parameter verification for OAuth flows.
+  </Accordion>
+  
+  <Accordion title="Email validation">
+    Email addresses are validated using regex pattern:
+    
+    ```typescript
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="API overview" icon="book" href="/api/overview">
+    Learn about the API structure and endpoints
+  </Card>
+  <Card title="Invoice endpoints" icon="file-invoice" href="/api/invoices">
+    Create and manage invoices via API
+  </Card>
+</CardGroup>

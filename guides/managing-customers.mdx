@@ -1,0 +1,285 @@
+---
+title: Managing customers
+description: Create and manage your customer database for streamlined invoice creation
+---
+
+The customer management system allows you to save customer information for quick reuse when creating invoices. This guide covers creating, editing, and organizing your customer list.
+
+## Customer data structure
+
+Customers are stored with the following fields (from `app/lib/types.ts:6-16`):
+
+```typescript
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  logo?: string;  // Optional customer logo
+}
+```
+
+## Accessing the customers page
+
+Navigate to `/customers` to access the customer management interface. The page displays:
+- Customer creation/edit form on the left
+- List of existing customers on the right
+
+## Creating a new customer
+
+<Steps>
+  <Step title="Fill in required information">
+    The customer form requires two mandatory fields:
+
+    **Name** (required)
+    - Full customer name or business name
+    - Must not be empty
+    - Examples: "Acme Corporation", "John Smith"
+
+    **Email** (required)
+    - Valid email address
+    - Validated with regex: `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`
+    - Used for invoice delivery
+
+    ```typescript
+    // Validation from customers/page.tsx:180-193
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.name.trim()) 
+      newErrors.name = "Name is required";
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!emailRegex.test(formData.email)) {
+      newErrors.email = "Enter a valid email address";
+    }
+    ```
+  </Step>
+
+  <Step title="Add address details">
+    Optional but recommended for complete customer records:
+
+    - **Address**: Street address or P.O. Box
+    - **City**: City or town
+    - **State/Province**: State, province, or region
+    - **Zip/Postal Code**: ZIP or postal code
+    - **Country**: Select from 85+ countries
+      - Defaults to "United Kingdom"
+      - Includes all major countries worldwide
+
+    <Tip>
+      Complete address information is helpful for international invoicing and record-keeping, even though it's optional.
+    </Tip>
+  </Step>
+
+  <Step title="Upload customer logo (optional)">
+    You can add a logo for each customer:
+
+    **Logo requirements:**
+    - Accepted formats: PNG, JPG, SVG
+    - Maximum file size: 2MB
+    - Stored as base64-encoded data URL
+
+    ```typescript
+    // Logo validation from customers/page.tsx:88-106
+    const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      if (!file.type.startsWith("image/")) {
+        setLogoError("Please upload a valid image file");
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        setLogoError("Image must be smaller than 2MB");
+        return;
+      }
+
+      // Convert to base64 data URL
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setLogo(ev.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    };
+    ```
+
+    **Managing logos:**
+    - Click **Upload Logo** to select an image
+    - Preview appears immediately after selection
+    - Click the X button on the preview to remove the logo
+    - Click **Change Logo** to replace an existing logo
+  </Step>
+
+  <Step title="Save the customer">
+    Click **Add Customer** to save the customer record.
+
+    The system:
+    - Generates a unique ID using timestamp: `String(Date.now())`
+    - Validates required fields
+    - Stores the customer in local storage
+    - Adds the customer to your list immediately
+
+    ```typescript
+    // Customer creation from customers/page.tsx:206-214
+    const newCustomer: Customer = {
+      id: String(Date.now()),
+      ...formData,
+      logo,
+    };
+    const created = await createCustomer(newCustomer);
+    setCustomers((prev) => [...prev, created]);
+    ```
+  </Step>
+</Steps>
+
+## Editing existing customers
+
+To modify a customer's information:
+
+1. **Locate the customer** in the customer list on the right side
+2. **Click the edit icon** (pencil icon) at the bottom of the customer card
+3. The form on the left populates with the customer's current information
+4. **Make your changes** to any fields
+5. **Click "Update Customer"** to save changes
+
+The customer information updates immediately across the system:
+- The customer list refreshes
+- Future invoices will use the updated information
+- **Existing invoices are not affected** (they store a customer snapshot)
+
+<Note>
+  When you edit a customer, existing invoices retain the original customer information because invoices store a `customer_snapshot` (see `schema.sql:23`). This preserves historical accuracy.
+</Note>
+
+## Deleting customers
+
+To remove a customer from your list:
+
+1. **Click the delete icon** (trash icon) on the customer card
+2. **Confirm the deletion** in the dialog prompt
+3. The customer is removed from your list
+
+```typescript
+// Deletion with confirmation from customers/page.tsx:168-174
+const handleDelete = async (id: string) => {
+  if (!confirm("Are you sure you want to delete this customer?")) return;
+  await deleteCustomer(id);
+  setCustomers((prev) => prev.filter((customer) => customer.id !== id));
+  if (editingId === id) {
+    resetForm();
+  }
+};
+```
+
+<Warning>
+  Deleting a customer does NOT delete their invoices. The invoice database schema uses `ON DELETE SET NULL` for customer references (see `schema.sql:29`), so existing invoices remain intact with their customer snapshot data.
+</Warning>
+
+## Using customers in invoices
+
+When creating an invoice, customers from your list appear in the "Select Customer" dropdown:
+
+1. **Open the invoice creation form** at `/invoices/create`
+2. **Click the "Select Customer" dropdown** in the Customer Information section
+3. **Choose a customer** from the list (displayed as "Name (Email)")
+4. **All customer fields auto-populate** including name, email, address, city, state, zip code, and country
+
+```typescript
+// Customer selection from InvoiceForm.tsx:208-224
+const handleCustomerSelect = (customerId: string) => {
+  setSelectedCustomerId(customerId);
+
+  const selected = customers.find((customer) => customer.id === customerId);
+  if (!selected) return;
+
+  setFormData((prev) => ({
+    ...prev,
+    customerName: selected.name,
+    customerEmail: selected.email,
+    customerAddress: selected.address,
+    customerCity: selected.city,
+    customerState: selected.state,
+    customerZipCode: selected.zipCode,
+    customerCountry: selected.country,
+  }));
+};
+```
+
+You can still manually edit the populated fields before saving the invoice.
+
+## Database storage
+
+Customers are stored in a dedicated table (from `app/lib/schema.sql:4-14`):
+
+```sql
+CREATE TABLE customers (
+  id          TEXT NOT NULL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  email       TEXT NOT NULL,
+  address     TEXT NOT NULL,
+  city        TEXT NOT NULL,
+  state       TEXT NOT NULL,
+  zip_code    TEXT NOT NULL,
+  country     TEXT NOT NULL,
+  logo        TEXT  -- Base64 encoded image data
+);
+```
+
+**Storage implementation:**
+- Primary storage: SQLite database via `app/lib/storage.ts`
+- Logos stored as base64-encoded strings directly in the database
+- No file system storage required
+
+## Customer list display
+
+The customer list shows each customer in a card format with:
+
+- **Customer logo** (if uploaded) displayed as a 40×40px rounded thumbnail
+- **Name** in bold
+- **Email** in muted text
+- **Full address** formatted across multiple lines:
+  ```
+  123 Main Street
+  San Francisco, CA 94105
+  United States
+  ```
+- **Action buttons** for editing and deleting
+
+Empty state message appears when no customers exist:
+> "No customers yet. Add your first customer to get started."
+
+## Best practices
+
+<Tip>
+  **Save frequently used customers**: If you regularly invoice the same clients, add them to your customer list to save time on each invoice.
+</Tip>
+
+<Tip>
+  **Keep information current**: Update customer details when they change addresses or contact information to ensure invoices reach the right place.
+</Tip>
+
+<Tip>
+  **Use customer logos for branding**: Adding customer logos makes it easier to visually identify clients when you have a large customer list.
+</Tip>
+
+<Warning>
+  Customer data is stored locally in your browser's storage. If you clear your browser data or switch devices, you'll need to re-enter your customers. Consider exporting important customer data periodically.
+</Warning>
+
+## Keyboard and workflow tips
+
+- **Quick cancel**: Click "Cancel" when editing to return the form to "Add Customer" mode
+- **Form resets**: After successfully adding or updating a customer, the form automatically clears
+- **Validation feedback**: Error messages appear in red below each field as you type
+- **Country selection**: Start typing in the country dropdown to quickly find countries
+
+## Next steps
+
+- Learn how to [create invoices](/guides/creating-invoices) using your saved customers
+- Set up [company information](/guides/company-setup) for your invoices
+- Configure [payment details](/guides/payment-details) to include on invoices

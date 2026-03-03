@@ -1,0 +1,145 @@
+---
+title: Email delivery
+description: Send invoices via email to customers
+---
+
+## Send invoice via email
+
+Sends an invoice to a customer via email. This endpoint is planned for future implementation.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-domain.com/api/email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "invoiceId": "inv_123",
+    "recipientEmail": "customer@example.com",
+    "subject": "Your Invoice from Acme Corp",
+    "message": "Please find your invoice attached. Payment is due within 14 days."
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/email', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    invoiceId: 'inv_123',
+    recipientEmail: 'customer@example.com',
+    subject: 'Your Invoice from Acme Corp',
+    message: 'Please find your invoice attached. Payment is due within 14 days.'
+  })
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Body parameters
+
+<ParamField body="invoiceId" type="string" required>
+  The unique identifier of the invoice to send
+</ParamField>
+
+<ParamField body="recipientEmail" type="string" required>
+  The email address of the recipient. Must be a valid email format.
+</ParamField>
+
+<ParamField body="subject" type="string">
+  Custom email subject line. Defaults to "Your Invoice"
+</ParamField>
+
+<ParamField body="message" type="string">
+  Optional custom message to include in the email body
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Information about the endpoint status
+</ResponseField>
+
+<ResponseField name="invoiceId" type="string">
+  The invoice ID that was requested to be sent
+</ResponseField>
+
+<ResponseField name="recipientEmail" type="string">
+  The recipient email address
+</ResponseField>
+
+<ResponseField name="subject" type="string">
+  The email subject line used
+</ResponseField>
+
+<ResponseField name="nextSteps" type="array">
+  Implementation steps for developers
+</ResponseField>
+
+```json 501 - Not implemented
+{
+  "message": "Email sending not yet implemented",
+  "invoiceId": "inv_123",
+  "recipientEmail": "customer@example.com",
+  "subject": "Your Invoice from Acme Corp",
+  "nextSteps": [
+    "1. Choose an email service (Resend, SendGrid, Mailgun, or AWS SES)",
+    "2. Install the library: npm install <service>",
+    "3. Set up API keys in .env.local",
+    "4. Create email template for invoices",
+    "5. Configure email sender and template data",
+    "6. Send email with invoice attached or as link",
+    "7. Update invoice status to 'sent'"
+  ]
+}
+```
+
+### Errors
+
+```json 400 - Missing required fields
+{
+  "error": "Invoice ID and recipient email are required"
+}
+```
+
+```json 400 - Invalid email address
+{
+  "error": "Invalid email address"
+}
+```
+
+```json 500 - Internal server error
+{
+  "error": "Failed to send email"
+}
+```
+
+## Email validation
+
+The endpoint validates email addresses using a regular expression pattern: `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`
+
+This ensures the recipient email:
+- Contains an @ symbol
+- Has characters before and after the @
+- Contains a domain with a period
+- Does not contain whitespace
+
+## Implementation notes
+
+This endpoint is currently not implemented and returns a `501 Not Implemented` status. The following email services are recommended for implementation:
+
+- **Resend** - Modern email API with great developer experience
+- **SendGrid** - Enterprise email delivery service
+- **Mailgun** - Email automation platform
+- **AWS SES** - Amazon Simple Email Service
+
+The implementation should:
+
+1. Retrieve the invoice data from your database
+2. Generate a PDF version of the invoice (or create an HTML email template)
+3. Send the email using your chosen service with the invoice attached or linked
+4. Update the invoice status to "sent"
+5. Return a success response
+
+See the source code at `app/api/email/route.ts:14-69` for the current implementation and validation logic.

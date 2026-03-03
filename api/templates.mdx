@@ -1,0 +1,265 @@
+---
+title: Templates
+description: Manage invoice templates for quick invoice creation
+---
+
+## List all templates
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://your-domain.com/api/templates \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const response = await fetch('/api/templates', {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Information about the endpoint status
+</ResponseField>
+
+<ResponseField name="note" type="string">
+  Additional implementation notes
+</ResponseField>
+
+```json Response example
+{
+  "message": "This endpoint would fetch invoice templates from a database",
+  "note": "Currently using localStorage on the client side"
+}
+```
+
+### Errors
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+```json 500 - Internal server error
+{
+  "error": "Failed to fetch templates"
+}
+```
+
+## Create a template
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-domain.com/api/templates \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Monthly Consulting Template",
+    "description": "Standard monthly consulting invoice",
+    "customer": {
+      "name": "Acme Corp",
+      "email": "billing@acme.com",
+      "address": "123 Main St",
+      "city": "New York",
+      "state": "NY",
+      "zipCode": "10001",
+      "country": "USA"
+    },
+    "items": [
+      {
+        "description": "Consulting Services",
+        "quantity": 40,
+        "rate": 150,
+        "taxRate": 10
+      }
+    ],
+    "currency": "USD",
+    "taxRate": 10,
+    "notes": "Payment due within 14 days"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/templates', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'Monthly Consulting Template',
+    description: 'Standard monthly consulting invoice',
+    customer: {
+      name: 'Acme Corp',
+      email: 'billing@acme.com',
+      address: '123 Main St',
+      city: 'New York',
+      state: 'NY',
+      zipCode: '10001',
+      country: 'USA'
+    },
+    items: [
+      {
+        description: 'Consulting Services',
+        quantity: 40,
+        rate: 150,
+        taxRate: 10
+      }
+    ],
+    currency: 'USD',
+    taxRate: 10,
+    notes: 'Payment due within 14 days'
+  })
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Body parameters
+
+<ParamField body="name" type="string" required>
+  Template name for easy identification
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional description of the template's purpose
+</ParamField>
+
+<ParamField body="customer" type="object">
+  Partial customer information object. All fields are optional and can be overridden when creating an invoice from the template.
+  
+  <ParamField body="id" type="string">
+    Customer identifier
+  </ParamField>
+  
+  <ParamField body="name" type="string">
+    Customer name
+  </ParamField>
+  
+  <ParamField body="email" type="string">
+    Customer email address
+  </ParamField>
+  
+  <ParamField body="address" type="string">
+    Street address
+  </ParamField>
+  
+  <ParamField body="city" type="string">
+    City
+  </ParamField>
+  
+  <ParamField body="state" type="string">
+    State or province
+  </ParamField>
+  
+  <ParamField body="zipCode" type="string">
+    Postal code
+  </ParamField>
+  
+  <ParamField body="country" type="string">
+    Country
+  </ParamField>
+  
+  <ParamField body="logo" type="string">
+    Customer logo URL
+  </ParamField>
+</ParamField>
+
+<ParamField body="items" type="array">
+  Array of template invoice line items with partial data
+  
+  <ParamField body="id" type="string">
+    Item identifier
+  </ParamField>
+  
+  <ParamField body="description" type="string">
+    Item or service description
+  </ParamField>
+  
+  <ParamField body="quantity" type="number">
+    Default quantity of items
+  </ParamField>
+  
+  <ParamField body="rate" type="number">
+    Default price per unit
+  </ParamField>
+  
+  <ParamField body="discount" type="number">
+    Default discount percentage (0-100)
+  </ParamField>
+  
+  <ParamField body="taxRate" type="number">
+    Default tax rate percentage (0-100)
+  </ParamField>
+</ParamField>
+
+<ParamField body="currency" type="string">
+  Three-letter ISO currency code (e.g., USD, EUR, GBP)
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Default notes or payment terms
+</ParamField>
+
+<ParamField body="taxRate" type="number">
+  Default global tax rate percentage (0-100)
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="template" type="object">
+  The created template object with all submitted fields
+</ResponseField>
+
+```json 201 - Template created successfully
+{
+  "message": "Template created successfully",
+  "template": {
+    "name": "Monthly Consulting Template",
+    "description": "Standard monthly consulting invoice",
+    "customer": {
+      "name": "Acme Corp",
+      "email": "billing@acme.com",
+      "address": "123 Main St",
+      "city": "New York",
+      "state": "NY",
+      "zipCode": "10001",
+      "country": "USA"
+    },
+    "items": [
+      {
+        "description": "Consulting Services",
+        "quantity": 40,
+        "rate": 150,
+        "taxRate": 10
+      }
+    ],
+    "currency": "USD",
+    "taxRate": 10,
+    "notes": "Payment due within 14 days"
+  }
+}
+```
+
+### Errors
+
+```json 400 - Template name required
+{
+  "error": "Template name is required"
+}
+```
+
+```json 500 - Internal server error
+{
+  "error": "Failed to create template"
+}
+```

@@ -1,0 +1,117 @@
+---
+title: Customer
+description: Customer information type for invoice recipients
+---
+
+## Customer
+
+The `Customer` interface represents a client or business entity that receives invoices.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the customer
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Full name of the customer or company
+</ResponseField>
+
+<ResponseField name="email" type="string" required>
+  Email address for correspondence and invoice delivery
+</ResponseField>
+
+<ResponseField name="address" type="string" required>
+  Street address or address line 1
+</ResponseField>
+
+<ResponseField name="city" type="string" required>
+  City name
+</ResponseField>
+
+<ResponseField name="state" type="string" required>
+  State, province, or region
+</ResponseField>
+
+<ResponseField name="zipCode" type="string" required>
+  Postal or ZIP code
+</ResponseField>
+
+<ResponseField name="country" type="string" required>
+  Country name
+</ResponseField>
+
+<ResponseField name="logo" type="string">
+  Optional URL or path to the customer's logo image
+</ResponseField>
+
+### TypeScript definition
+
+```typescript
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  logo?: string;
+}
+```
+
+### Example
+
+```typescript
+const customer: Customer = {
+  id: "cust_xyz789",
+  name: "TechStart Inc.",
+  email: "accounting@techstart.io",
+  address: "456 Innovation Drive, Suite 200",
+  city: "Austin",
+  state: "TX",
+  zipCode: "78701",
+  country: "United States",
+  logo: "https://cdn.example.com/logos/techstart.png"
+};
+```
+
+### Usage in invoices
+
+Customer objects are embedded directly in invoices:
+
+```typescript
+import type { Invoice, Customer } from './types';
+
+const invoice: Invoice = {
+  // ... other invoice fields
+  customer: {
+    id: "cust_123",
+    name: "Acme Corporation",
+    email: "billing@acme.com",
+    address: "123 Business St",
+    city: "San Francisco",
+    state: "CA",
+    zipCode: "94105",
+    country: "United States"
+  },
+  // ... remaining fields
+};
+```
+
+### Partial customer objects
+
+When used in templates, customer fields are optional to allow for reusable templates:
+
+```typescript
+import type { InvoiceTemplate } from './types';
+
+const template: InvoiceTemplate = {
+  // ... other template fields
+  customer: {
+    // Only specify common fields, leave others empty
+    state: "CA",
+    country: "United States"
+  },
+  // ... remaining fields
+};
+```

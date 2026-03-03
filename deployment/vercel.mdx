@@ -1,0 +1,253 @@
+---
+title: Deploy to Vercel
+description: Deploy Invoice Generator to Vercel with automatic builds and deployments
+---
+
+Vercel provides the fastest and easiest way to deploy Invoice Generator with zero configuration. This guide walks through deployment from a Git repository.
+
+## Prerequisites
+
+Before deploying to Vercel:
+
+- GitHub, GitLab, or Bitbucket repository with Invoice Generator code
+- Turso database created and migrated
+- Google OAuth credentials configured
+- Vercel account (free tier available)
+
+## Deployment steps
+
+<Steps>
+  <Step title="Import repository">
+    Navigate to [Vercel's import page](https://vercel.com/new) and import your Git repository.
+    
+    ```bash
+    # Or use the Vercel CLI
+    npm i -g vercel
+    vercel
+    ```
+  </Step>
+  
+  <Step title="Configure project settings">
+    Vercel automatically detects Next.js configuration:
+    
+    - **Framework Preset**: Next.js
+    - **Build Command**: `npm run build` (from `package.json:7`)
+    - **Output Directory**: `.next` (default)
+    - **Install Command**: `npm install`
+    - **Node.js Version**: 20.x or later
+  </Step>
+  
+  <Step title="Add environment variables">
+    In the Vercel dashboard, add all required environment variables:
+    
+    **Database**
+    - `TURSO_DATABASE_URL` - Your Turso database URL
+    - `TURSO_AUTH_TOKEN` - Turso authentication token
+    
+    **Authentication**
+    - `AUTH_SECRET` - Random secret for NextAuth.js (generate with `openssl rand -base64 32`)
+    - `GOOGLE_CLIENT_ID` - Google OAuth Client ID
+    - `GOOGLE_CLIENT_SECRET` - Google OAuth Client Secret
+    
+    See [environment variables reference](/deployment/environment-variables) for complete details.
+  </Step>
+  
+  <Step title="Configure OAuth redirect URI">
+    Add Vercel deployment URL to Google OAuth settings:
+    
+    ```
+    https://your-project.vercel.app/api/auth/callback/google
+    ```
+    
+    Update both development and production authorized redirect URIs in Google Cloud Console.
+  </Step>
+  
+  <Step title="Run database migration">
+    After deployment, run the migration script to set up your database schema:
+    
+    ```bash
+    # Install Vercel CLI if not already installed
+    npm i -g vercel
+    
+    # Run migration in production environment
+    vercel env pull .env.production
+    npm run migrate:prod
+    ```
+    
+    This executes `scripts/migrate.mjs:1-27` which creates tables from `app/lib/schema.sql`.
+  </Step>
+  
+  <Step title="Deploy">
+    Click **Deploy** in Vercel dashboard. Your application will build and deploy automatically.
+    
+    Deployment typically takes 2-3 minutes for the initial build.
+  </Step>
+</Steps>
+
+## Post-deployment configuration
+
+### Custom domain
+
+Add a custom domain in Vercel dashboard:
+
+1. Navigate to **Settings** > **Domains**
+2. Add your domain name
+3. Configure DNS records as instructed
+4. Update Google OAuth redirect URIs with new domain
+
+### Environment-specific variables
+
+Vercel supports environment-specific configuration:
+
+- **Production** - Variables used in production deployments
+- **Preview** - Variables for preview deployments from pull requests
+- **Development** - Variables for local development with `vercel dev`
+
+<Note>
+Set different `TURSO_DATABASE_URL` values for production and preview environments to avoid data conflicts.
+</Note>
+
+## Automatic deployments
+
+Vercel automatically deploys:
+
+- **Production** - Commits to your main/master branch
+- **Preview** - Pull requests and commits to other branches
+
+Each deployment gets a unique URL for testing.
+
+## Build optimization
+
+The Next.js configuration (`next.config.ts:3-18`) is optimized for Vercel:
+
+```typescript
+const nextConfig: NextConfig = {
+  turbopack: {
+    root: ".",
+  },
+  serverExternalPackages: ["bcryptjs"],
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+      },
+    ],
+  },
+};
+```
+
+**Key optimizations:**
+
+- **Turbopack** enabled for faster builds
+- **bcryptjs** marked as server-only package for smaller client bundles
+- **Image domains** configured for Google profile pictures
+
+## Troubleshooting
+
+### Build failures
+
+**Error: Module not found**
+```
+Solution: Ensure all dependencies are in package.json dependencies, not devDependencies
+```
+
+**Error: TURSO_DATABASE_URL is not set**
+```
+Solution: Add environment variable in Vercel dashboard under Settings > Environment Variables
+```
+
+### Runtime errors
+
+**Authentication not working**
+
+Verify:
+1. `AUTH_SECRET` is set in environment variables
+2. Google OAuth redirect URI matches exactly: `https://your-domain.com/api/auth/callback/google`
+3. `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are correct
+
+**Database connection errors**
+
+Check:
+1. `TURSO_DATABASE_URL` format is correct (should start with `libsql://`)
+2. `TURSO_AUTH_TOKEN` is set (optional for local databases, required for remote)
+3. Database exists and is accessible from Vercel's network
+
+### Migration issues
+
+<Warning>
+Run migrations before the first user accesses your application. Missing tables will cause runtime errors.
+</Warning>
+
+If migrations fail:
+
+```bash
+# Verify environment variables are loaded
+node --env-file=.env.production scripts/migrate.mjs
+
+# Check database connection
+turso db show <your-database-name>
+```
+
+## Monitoring and analytics
+
+Vercel provides built-in monitoring:
+
+- **Analytics** - Page views, visitor metrics, and Web Vitals
+- **Logs** - Real-time function logs and errors
+- **Speed Insights** - Performance monitoring
+
+Access these in the Vercel dashboard under your project.
+
+## Scaling considerations
+
+Vercel automatically scales based on traffic:
+
+- **Serverless functions** - Auto-scale to handle concurrent requests
+- **Edge Network** - Global CDN for static assets
+- **Database** - Scale Turso separately using edge replicas
+
+<Note>
+Free tier includes 100GB bandwidth and 100 hours of serverless function execution. Monitor usage in Vercel dashboard.
+</Note>
+
+## Security best practices
+
+1. **Environment variables** - Never expose secrets in client-side code
+2. **Preview deployments** - Use separate databases for preview branches
+3. **Authentication** - Regenerate `AUTH_SECRET` if compromised
+4. **OAuth** - Restrict OAuth redirect URIs to known domains only
+
+## CI/CD integration
+
+Vercel integrates with GitHub Actions for advanced workflows:
+
+```yaml
+name: Run migrations
+on:
+  deployment_status:
+jobs:
+  migrate:
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run migration
+        run: |
+          npm install
+          npm run migrate:prod
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Environment variables" icon="key" href="/deployment/environment-variables">
+    Complete reference for all environment variables
+  </Card>
+  <Card title="Self-hosted option" icon="server" href="/deployment/self-hosted">
+    Alternative deployment on your infrastructure
+  </Card>
+</CardGroup>

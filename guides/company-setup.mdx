@@ -1,0 +1,353 @@
+---
+title: Company setup
+description: Configure your company or freelancer profile to appear on invoices
+---
+
+Your company profile contains the business information that appears on your invoices. This guide covers creating and managing company profiles, including logo uploads and multi-profile support.
+
+## Company data structure
+
+Company details are defined with the following structure (from `app/lib/types.ts:87-103`):
+
+```typescript
+interface CompanyDetails {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  website?: string;
+  taxId?: string;
+  logo?: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## Accessing company settings
+
+Navigate to `/company` to access the company settings page. This page allows you to:
+- Create multiple company profiles
+- Set a default profile for new invoices
+- Configure default currency settings
+- Upload company logos
+
+## Creating your first company profile
+
+<Steps>
+  <Step title="Open the company form">
+    On the Company Settings page:
+    - If you have no profiles yet, click **Add Company Profile**
+    - If profiles exist, the button appears above the profile list
+  </Step>
+
+  <Step title="Upload your company logo">
+    Add a logo to appear on your invoices:
+
+    **Logo requirements:**
+    - Formats: PNG, JPG, SVG
+    - Maximum size: 2MB
+    - Stored as base64-encoded data URL
+    - Displays as 48×48px thumbnail in the profile list
+    - Appears at full resolution on generated invoices
+
+    ```typescript
+    // Logo handling from CompanyForm.tsx:49-63
+    const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setLogo(ev.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    };
+
+    const removeLogo = () => {
+      setLogo(undefined);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+    ```
+
+    **Managing the logo:**
+    - Click **Upload Logo** to choose an image
+    - Preview appears immediately
+    - Click the X button to remove it
+    - Click **Change Logo** to replace an existing one
+  </Step>
+
+  <Step title="Fill in company information">
+    Enter your business details:
+
+    **Basic information:**
+    - **Company/Freelance Name**: Your business name or personal name for freelancing
+    - **Email**: Business contact email
+    - **Phone**: Contact phone number (optional)
+    - **Website**: Company website URL (optional)
+
+    **Address details:**
+    - **Address**: Street address or business location
+    - **City**: City or town
+    - **State/Province**: State, province, or region
+    - **Zip/Postal Code**: ZIP or postal code
+    - **Country**: Country of business operation
+
+    **Tax information:**
+    - **Tax ID**: VAT number, EIN, or other tax identifier (optional)
+      - Example: "GB123456789" for UK VAT
+      - Example: "12-3456789" for US EIN
+
+    <Note>
+      All fields except phone, website, and tax ID are required. However, providing complete information creates more professional-looking invoices.
+    </Note>
+  </Step>
+
+  <Step title="Set as default (optional)">
+    Check the **"Set as default company profile"** checkbox to make this profile the default for new invoices.
+
+    ```typescript
+    // Default flag from CompanyForm.tsx:236-247
+    <label className="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        name="isDefault"
+        checked={formData.isDefault}
+        onChange={handleInputChange}
+        className="rounded border-(--border)"
+      />
+      <span className="text-(--muted)">
+        Set as default company profile
+      </span>
+    </label>
+    ```
+
+    Only one profile can be marked as default at a time. Setting a new default automatically unmarks the previous one.
+  </Step>
+
+  <Step title="Save the profile">
+    Click **Save Company Details** to create the profile.
+
+    The system:
+    - Generates a unique ID: `String(Date.now())`
+    - Sets creation and update timestamps
+    - Stores the profile in the database
+    - Adds the profile to your list
+
+    ```typescript
+    // Profile creation from CompanyForm.tsx:76-98
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      setIsLoading(true);
+
+      try {
+        const company: CompanyDetails = {
+          id: initialData?.id || String(Date.now()),
+          ...formData,
+          logo,
+          createdAt: initialData?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        await onSubmit(company);
+      } catch (error) {
+        setSubmitError(
+          error instanceof Error ? error.message : "Failed to save company details"
+        );
+      }
+    };
+    ```
+  </Step>
+</Steps>
+
+## Managing multiple company profiles
+
+You can create multiple company profiles for different use cases:
+
+### Use cases for multiple profiles
+
+- **Multiple businesses**: Separate profiles for different companies you operate
+- **Different brands**: Different branding for various product lines
+- **Freelance vs. company**: Personal freelance work vs. incorporated business
+- **Different locations**: Regional offices or branches
+
+### Setting a default profile
+
+To change which profile is used by default:
+
+1. Locate the profile you want to set as default
+2. Click the **star icon** in the profile card
+3. The profile is marked with a blue "Default" badge
+4. Previous default profile loses its default status automatically
+
+```typescript
+// Setting default from company/page.tsx:104-113
+const handleSetDefault = async (id: string) => {
+  if (await setDefaultCompany(id)) {
+    setCompanies((prev) =>
+      prev.map((c) => ({
+        ...c,
+        isDefault: c.id === id,
+      }))
+    );
+  }
+};
+```
+
+## Editing company profiles
+
+To update an existing profile:
+
+1. **Click the edit icon** (pencil) on the profile card
+2. The form opens with current profile data
+3. **Make your changes** to any fields
+4. **Click "Save Company Details"** to update
+
+The profile updates immediately with a new `updatedAt` timestamp.
+
+## Deleting company profiles
+
+To remove a profile:
+
+1. **Click the delete icon** (trash) on the profile card
+2. **Confirm deletion** in the dialog: "Are you sure you want to delete this company profile?"
+3. The profile is permanently removed
+
+<Warning>
+  Deleting a company profile does not affect existing invoices. However, the profile will no longer be available for new invoices.
+</Warning>
+
+## Configuring default currency
+
+The Company Settings page includes a **Default Currency** section to set the currency used for new invoices.
+
+### Setting default currency
+
+<Steps>
+  <Step title="Select your currency">
+    Choose from 11 supported currencies:
+    - USD - US Dollar
+    - EUR - Euro
+    - GBP - British Pound
+    - CAD - Canadian Dollar
+    - AUD - Australian Dollar
+    - JPY - Japanese Yen
+    - CHF - Swiss Franc
+    - CNY - Chinese Yuan
+    - INR - Indian Rupee
+    - MXN - Mexican Peso
+    - NGN - Nigerian Naira
+
+    ```typescript
+    // Currency list from company/page.tsx:36-48
+    const CURRENCIES = [
+      { code: "USD", label: "US Dollar" },
+      { code: "EUR", label: "Euro" },
+      { code: "GBP", label: "British Pound" },
+      // ... additional currencies
+    ];
+    ```
+  </Step>
+
+  <Step title="Save the setting">
+    Click **Save** to store your default currency preference.
+
+    ```typescript
+    // Saving currency setting from company/page.tsx:72-78
+    const handleSaveCurrency = async () => {
+      setIsSavingCurrency(true);
+      await saveSettings({ defaultCurrency });
+      setIsSavingCurrency(false);
+      setCurrencySaved(true);
+      setTimeout(() => setCurrencySaved(false), 2000);
+    };
+    ```
+
+    The button text changes to "Saved!" for 2 seconds to confirm the update.
+  </Step>
+</Steps>
+
+The default currency is automatically selected when you create new invoices, but you can override it on a per-invoice basis.
+
+## Database structure
+
+Company profiles are stored in the database (from `app/lib/schema.sql:55-71`):
+
+```sql
+CREATE TABLE company_details (
+  id          TEXT    NOT NULL PRIMARY KEY,
+  name        TEXT    NOT NULL,
+  email       TEXT    NOT NULL,
+  phone       TEXT,
+  address     TEXT    NOT NULL,
+  city        TEXT    NOT NULL,
+  state       TEXT    NOT NULL,
+  zip_code    TEXT    NOT NULL,
+  country     TEXT    NOT NULL,
+  website     TEXT,
+  tax_id      TEXT,
+  logo        TEXT,
+  is_default  INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT    NOT NULL,
+  updated_at  TEXT    NOT NULL
+);
+```
+
+Settings are stored separately:
+
+```sql
+CREATE TABLE settings (
+  id               TEXT NOT NULL PRIMARY KEY DEFAULT 'default',
+  default_currency TEXT NOT NULL DEFAULT 'GBP',
+  updated_at       TEXT NOT NULL
+);
+```
+
+## Profile card display
+
+Each profile appears in a card showing:
+
+- **Company logo** (48×48px) if uploaded
+- **Company name** as the card title
+- **Email address** below the name
+- **"Default" badge** for the default profile
+- **Profile details** in a grid:
+  - Phone
+  - Website
+  - Address
+  - Tax ID
+  - City
+  - Country
+- **Action buttons**:
+  - Star icon: Set as default (hidden for current default)
+  - Pencil icon: Edit profile
+  - Trash icon: Delete profile
+
+## Best practices
+
+<Tip>
+  **Complete all fields**: Even though some fields are optional, providing complete information makes your invoices look more professional and trustworthy.
+</Tip>
+
+<Tip>
+  **Use high-quality logos**: Upload a clear, high-resolution logo (SVG or PNG with transparency work best) for the best appearance on invoices.
+</Tip>
+
+<Tip>
+  **Set appropriate defaults**: Choose your most commonly used profile as default and your primary currency to speed up invoice creation.
+</Tip>
+
+<Warning>
+  Logo files are stored as base64 data URLs in the database. Very large images (approaching 2MB) may impact performance. Optimize your logo file size when possible.
+</Warning>
+
+## Next steps
+
+- Learn how to [create invoices](/guides/creating-invoices) using your company profile
+- Add [payment details](/guides/payment-details) to tell customers how to pay
+- Set up [customer records](/guides/managing-customers) for faster invoicing

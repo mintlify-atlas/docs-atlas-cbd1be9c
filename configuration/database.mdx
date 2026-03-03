@@ -1,0 +1,391 @@
+---
+title: Database setup
+description: Configure Turso (libSQL) database for Invoice Generator
+---
+
+Invoice Generator uses [Turso](https://turso.tech), a distributed SQLite database built on libSQL. This guide covers database setup, configuration, and schema management.
+
+## Prerequisites
+
+- A Turso account (sign up at [turso.tech](https://turso.tech))
+- Turso CLI installed (optional, for local management)
+
+## Database client
+
+The application uses the `@libsql/client` package to connect to Turso:
+
+```typescript app/lib/turso.ts
+import { createClient } from "@libsql/client";
+
+const db = createClient({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+export default db;
+```
+
+Reference: `app/lib/turso.ts:1-8`
+
+## Environment variables
+
+Configure these environment variables in your `.env.local` file:
+
+```bash
+TURSO_DATABASE_URL=libsql://your-database.turso.io
+TURSO_AUTH_TOKEN=your-auth-token
+```
+
+### Getting your credentials
+
+1. **Create a database** in the Turso dashboard or CLI:
+   ```bash
+   turso db create invoice-generator
+   ```
+
+2. **Get the database URL**:
+   ```bash
+   turso db show invoice-generator --url
+   ```
+
+3. **Generate an auth token**:
+   ```bash
+   turso db tokens create invoice-generator
+   ```
+
+<Note>
+  The `TURSO_AUTH_TOKEN` is optional for local development with `libsql://` URLs but required for production.
+</Note>
+
+## Database schema
+
+The application uses a comprehensive SQLite schema with foreign key constraints enabled.
+
+### Core tables
+
+#### Customers
+
+Stores customer information for invoices:
+
+```sql
+CREATE TABLE IF NOT EXISTS customers (
+  id          TEXT NOT NULL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  email       TEXT NOT NULL,
+  address     TEXT NOT NULL,
+  city        TEXT NOT NULL,
+  state       TEXT NOT NULL,
+  zip_code    TEXT NOT NULL,
+  country     TEXT NOT NULL,
+  logo        TEXT
+);
+```
+
+Reference: `app/lib/schema.sql:4-14`
+
+#### Invoices
+
+Stores invoice data with status tracking:
+
+```sql
+CREATE TABLE IF NOT EXISTS invoices (
+  id                TEXT NOT NULL PRIMARY KEY,
+  invoice_number    TEXT NOT NULL UNIQUE,
+  date              TEXT NOT NULL,
+  due_date          TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sent','paid','cancelled')),
+  customer_id       TEXT,
+  customer_snapshot TEXT NOT NULL,
+  notes             TEXT,
+  tax_rate          REAL,
+  currency          TEXT NOT NULL DEFAULT 'GBP',
+  created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+);
+```
+
+Reference: `app/lib/schema.sql:16-30`
+
+**Status values**: `draft`, `sent`, `paid`, `cancelled`
+
+#### Invoice items
+
+Stores line items for each invoice:
+
+```sql
+CREATE TABLE IF NOT EXISTS invoice_items (
+  id          TEXT NOT NULL PRIMARY KEY,
+  invoice_id  TEXT NOT NULL,
+  description TEXT NOT NULL,
+  quantity    REAL NOT NULL,
+  rate        REAL NOT NULL,
+  discount    REAL,
+  tax_rate    REAL,
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+);
+```
+
+Reference: `app/lib/schema.sql:32-41`
+
+#### Templates
+
+Stores invoice templates for quick creation:
+
+```sql
+CREATE TABLE IF NOT EXISTS templates (
+  id               TEXT NOT NULL PRIMARY KEY,
+  name             TEXT NOT NULL,
+  description      TEXT,
+  customer_partial TEXT NOT NULL,
+  items_partial    TEXT NOT NULL,
+  notes            TEXT,
+  tax_rate         REAL,
+  currency         TEXT NOT NULL DEFAULT 'GBP',
+  created_at       TEXT NOT NULL
+);
+```
+
+Reference: `app/lib/schema.sql:43-53`
+
+### Configuration tables
+
+#### Company details
+
+```sql
+CREATE TABLE IF NOT EXISTS company_details (
+  id          TEXT    NOT NULL PRIMARY KEY,
+  name        TEXT    NOT NULL,
+  email       TEXT    NOT NULL,
+  phone       TEXT,
+  address     TEXT    NOT NULL,
+  city        TEXT    NOT NULL,
+  state       TEXT    NOT NULL,
+  zip_code    TEXT    NOT NULL,
+  country     TEXT    NOT NULL,
+  website     TEXT,
+  tax_id      TEXT,
+  logo        TEXT,
+  is_default  INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT    NOT NULL,
+  updated_at  TEXT    NOT NULL
+);
+```
+
+Reference: `app/lib/schema.sql:55-71`
+
+#### Account details
+
+Stores bank account information for invoices:
+
+```sql
+CREATE TABLE IF NOT EXISTS account_details (
+  id                  TEXT    NOT NULL PRIMARY KEY,
+  account_holder_name TEXT    NOT NULL,
+  bank_name           TEXT    NOT NULL,
+  account_number      TEXT    NOT NULL,
+  sort_code           TEXT,
+  routing_number      TEXT,
+  iban                TEXT,
+  swift_bic           TEXT,
+  currency            TEXT,
+  payment_reference   TEXT,
+  notes               TEXT,
+  is_default          INTEGER NOT NULL DEFAULT 0,
+  created_at          TEXT    NOT NULL,
+  updated_at          TEXT    NOT NULL
+);
+```
+
+Reference: `app/lib/schema.sql:73-88`
+
+#### Settings
+
+```sql
+CREATE TABLE IF NOT EXISTS settings (
+  id               TEXT NOT NULL PRIMARY KEY DEFAULT 'default',
+  default_currency TEXT NOT NULL DEFAULT 'GBP',
+  updated_at       TEXT NOT NULL
+);
+
+-- Seed default settings row
+INSERT OR IGNORE INTO settings (id, default_currency, updated_at)
+VALUES ('default', 'GBP', datetime('now'));
+```
+
+Reference: `app/lib/schema.sql:90-98`
+
+### Authentication table
+
+#### Users
+
+Stores user accounts for NextAuth.js:
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT    NOT NULL PRIMARY KEY,
+  name          TEXT,
+  email         TEXT    UNIQUE,
+  emailVerified TEXT,
+  image         TEXT,
+  password      TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+Reference: `app/lib/schema.sql:101-109`
+
+<Note>
+  The `password` field is `NULL` for users who sign in with OAuth providers like Google.
+</Note>
+
+## Running migrations
+
+The application includes a migration script to set up the database schema.
+
+### Development migration
+
+```bash
+npm run migrate
+```
+
+This runs the migration using your `.env.local` configuration.
+
+### Production migration
+
+```bash
+npm run migrate:prod
+```
+
+This runs the migration using your `.env.production` configuration.
+
+### Migration script
+
+The migration script executes the SQL schema file:
+
+```javascript scripts/migrate.mjs
+import { createClient } from "@libsql/client";
+import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const schema = readFileSync(join(__dirname, "../app/lib/schema.sql"), "utf8");
+
+if (!process.env.TURSO_DATABASE_URL) {
+  console.error("Error: TURSO_DATABASE_URL is not set.");
+  process.exit(1);
+}
+
+const db = createClient({
+  url: process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+console.log(`Running migration on: ${process.env.TURSO_DATABASE_URL}`);
+await db.executeMultiple(schema);
+console.log("Migration complete.");
+```
+
+Reference: `scripts/migrate.mjs:1-27`
+
+## Foreign keys
+
+The schema uses foreign key constraints to maintain referential integrity:
+
+```sql
+PRAGMA foreign_keys = ON;
+```
+
+Reference: `app/lib/schema.sql:2`
+
+**Key relationships:**
+
+- `invoices.customer_id` → `customers.id` (SET NULL on delete)
+- `invoice_items.invoice_id` → `invoices.id` (CASCADE on delete)
+
+<Note>
+  When a customer is deleted, invoices keep the `customer_snapshot` but lose the reference. When an invoice is deleted, all items are automatically removed.
+</Note>
+
+## Database operations
+
+The application uses the Turso client for database queries:
+
+### Query example
+
+```typescript
+const result = await db.execute({
+  sql: "SELECT id, name, email FROM users WHERE email = ? LIMIT 1",
+  args: [email],
+});
+
+const user = result.rows[0];
+```
+
+Reference: `auth.ts:27-30`
+
+### Insert example
+
+```typescript
+await db.execute({
+  sql: `INSERT INTO users (id, name, email, password, created_at)
+        VALUES (?, ?, ?, ?, datetime('now'))`,
+  args: [id, name, email, hashedPassword],
+});
+```
+
+Reference: `app/api/auth/register/route.ts:42-46`
+
+## Best practices
+
+1. **Use parameterized queries** - Always use the `args` parameter to prevent SQL injection
+2. **Handle errors** - Wrap database calls in try/catch blocks
+3. **Use transactions** - For operations that modify multiple tables
+4. **Index frequently queried fields** - Add indexes for email and foreign keys if needed
+5. **Validate input** - Check data before inserting into the database
+
+## Troubleshooting
+
+### Connection errors
+
+If you can't connect to the database:
+
+1. Verify `TURSO_DATABASE_URL` is correct
+2. Check that `TURSO_AUTH_TOKEN` is valid
+3. Ensure your Turso database is active
+4. Test the connection with the Turso CLI:
+   ```bash
+   turso db shell invoice-generator
+   ```
+
+### Migration failures
+
+If migrations fail:
+
+1. Check that `TURSO_DATABASE_URL` is set
+2. Verify the schema.sql file exists
+3. Look for syntax errors in the SQL
+4. Check database permissions
+
+### Foreign key violations
+
+If you get foreign key errors:
+
+1. Verify foreign keys are enabled: `PRAGMA foreign_keys = ON;`
+2. Check that referenced records exist before inserting
+3. Delete child records before parent records (or use CASCADE)
+
+## Local development
+
+For local development without Turso, you can use a local SQLite file:
+
+```typescript
+const db = createClient({
+  url: "file:local.db",
+});
+```
+
+<Warning>
+  Local SQLite files are not recommended for production. Use Turso for production deployments.
+</Warning>

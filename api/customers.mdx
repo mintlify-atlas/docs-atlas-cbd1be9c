@@ -1,0 +1,179 @@
+---
+title: Customers
+description: Managing customer information within invoices
+---
+
+## Overview
+
+Customer data is managed as part of invoice creation and updates. There is no separate customer API endpoint. Customer information is embedded within invoice objects.
+
+## Customer object structure
+
+The customer object is included in every invoice and contains the following fields:
+
+<ResponseField name="id" type="string" required>
+  Unique customer identifier
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Customer or company name
+</ResponseField>
+
+<ResponseField name="email" type="string" required>
+  Customer email address for invoice delivery
+</ResponseField>
+
+<ResponseField name="address" type="string" required>
+  Street address
+</ResponseField>
+
+<ResponseField name="city" type="string" required>
+  City
+</ResponseField>
+
+<ResponseField name="state" type="string" required>
+  State or province
+</ResponseField>
+
+<ResponseField name="zipCode" type="string" required>
+  Postal or ZIP code
+</ResponseField>
+
+<ResponseField name="country" type="string" required>
+  Country name
+</ResponseField>
+
+<ResponseField name="logo" type="string">
+  Optional URL to customer logo image
+</ResponseField>
+
+## Example customer object
+
+```json
+{
+  "id": "cust_123",
+  "name": "Acme Corporation",
+  "email": "billing@acme.com",
+  "address": "123 Main Street",
+  "city": "New York",
+  "state": "NY",
+  "zipCode": "10001",
+  "country": "USA",
+  "logo": "https://example.com/logos/acme.png"
+}
+```
+
+## Working with customers
+
+### Creating an invoice with customer data
+
+When creating an invoice, include the complete customer object in the request body:
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-domain.com/api/invoices \
+  -H "Content-Type: application/json" \
+  -d '{
+    "invoiceNumber": "INV-001",
+    "date": "2026-03-03",
+    "dueDate": "2026-03-17",
+    "status": "draft",
+    "customer": {
+      "id": "cust_123",
+      "name": "Acme Corporation",
+      "email": "billing@acme.com",
+      "address": "123 Main Street",
+      "city": "New York",
+      "state": "NY",
+      "zipCode": "10001",
+      "country": "USA"
+    },
+    "items": [],
+    "currency": "USD"
+  }'
+```
+
+```javascript JavaScript
+const invoice = await fetch('/api/invoices', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    invoiceNumber: 'INV-001',
+    customer: {
+      id: 'cust_123',
+      name: 'Acme Corporation',
+      email: 'billing@acme.com',
+      address: '123 Main Street',
+      city: 'New York',
+      state: 'NY',
+      zipCode: '10001',
+      country: 'USA'
+    },
+    // ... other invoice fields
+  })
+});
+```
+</CodeGroup>
+
+### Updating customer information
+
+To update customer information for an existing invoice, use the PATCH endpoint:
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://your-domain.com/api/invoices/inv_123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer": {
+      "email": "new-billing@acme.com",
+      "address": "456 New Address"
+    }
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/invoices/inv_123', {
+  method: 'PATCH',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    customer: {
+      email: 'new-billing@acme.com',
+      address: '456 New Address'
+    }
+  })
+});
+```
+</CodeGroup>
+
+### Using customer data in templates
+
+Templates can include partial customer data that will be pre-filled when creating new invoices:
+
+```javascript
+const template = {
+  name: "Monthly Consulting Template",
+  customer: {
+    name: "Acme Corporation",
+    email: "billing@acme.com"
+    // Other fields can be filled in when using the template
+  },
+  // ... other template fields
+};
+```
+
+## Storage implementation
+
+Currently, the Invoice Generator application uses localStorage on the client side to store customer data. Customer information persists as part of invoice objects and can be reused across multiple invoices.
+
+When implementing a database backend, consider:
+
+- Creating a separate `customers` table for normalized data storage
+- Linking invoices to customers via foreign key relationships
+- Implementing a dedicated customer API for CRUD operations
+- Adding customer search and filtering capabilities
+
+See the type definitions at `app/lib/types.ts:6-16` for the complete Customer interface.

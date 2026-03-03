@@ -1,0 +1,209 @@
+---
+title: Invoice management
+description: Create, manage, and track professional invoices with comprehensive filtering and status management
+---
+
+## Overview
+
+The invoice management system is the core feature of Invoice Generator, allowing you to create professional invoices with customizable line items, tax calculations, and real-time status tracking. All invoices are stored locally in your browser using IndexedDB, ensuring your data remains private and accessible offline.
+
+## Creating invoices
+
+Invoices can be created through an intuitive multi-step form that captures all necessary information:
+
+### Invoice details
+
+Every invoice includes:
+
+- **Invoice number**: Automatically generated in the format `INV-{timestamp}{random}` (e.g., `INV-123456789`)
+- **Currency**: Choose from 11 supported currencies including USD, EUR, GBP, CAD, AUD, JPY, CHF, CNY, INR, MXN, and NGN
+- **Invoice date**: Date the invoice was issued
+- **Due date**: Payment deadline (defaults to 30 days from creation)
+
+<Note>
+The invoice number is auto-generated on form load to ensure uniqueness. You can customize it before saving if needed.
+</Note>
+
+### Customer information
+
+Select an existing customer from your saved list or enter new customer details:
+
+```typescript
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  logo?: string;
+}
+```
+
+Customer selection auto-fills all address fields, making invoice creation faster for repeat customers.
+
+### Line items
+
+Add multiple line items to your invoice with:
+
+- **Description**: Item or service description
+- **Quantity**: Number of units (supports decimals, e.g., 2.5 hours)
+- **Rate**: Price per unit
+- **Calculated amount**: Automatically computed as `quantity × rate`
+
+```typescript
+interface InvoiceItem {
+  id: string;
+  description: string;
+  quantity: number;
+  rate: number;
+  discount?: number;
+  taxRate?: number;
+}
+```
+
+<Tip>
+You can add or remove line items dynamically. At least one item is required to create an invoice.
+</Tip>
+
+### Tax and totals
+
+The system automatically calculates:
+
+- **Subtotal**: Sum of all line items
+- **Tax**: Applied as a percentage (0-100%) on the subtotal
+- **Total**: Final amount including tax
+
+Totals update in real-time as you modify quantities, rates, or tax rates.
+
+### Notes
+
+Add optional notes to include:
+- Payment terms
+- Additional instructions
+- Thank you messages
+- Late payment penalties
+
+## Invoice statuses
+
+Invoices can have four different statuses:
+
+| Status | Description | Visual Indicator |
+|--------|-------------|------------------|
+| `draft` | Invoice created but not sent | Gray badge |
+| `sent` | Invoice sent to customer | Blue badge |
+| `paid` | Payment received | Green badge |
+| `cancelled` | Invoice cancelled | Red badge |
+
+```typescript
+type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
+```
+
+All invoices are created with `draft` status by default. You can update the status from the invoice detail page.
+
+## Invoice dashboard
+
+The main invoices page (`/invoices`) provides:
+
+### Statistics overview
+
+- **Total invoices**: Count of all invoices
+- **Total amount**: Sum of all invoice amounts in default currency
+- **Paid**: Number of paid invoices
+- **Overdue**: Number of invoices past due date
+
+### Search and filtering
+
+**Search** by:
+- Invoice number
+- Customer name
+- Customer email
+
+**Filter** by status:
+- All invoices
+- Draft only
+- Sent only
+- Paid only
+- Cancelled only
+
+**Sort** by:
+- Date (newest first)
+- Amount (highest first)
+- Customer name (alphabetical)
+
+### Due date warnings
+
+Invoices automatically display warning badges:
+
+- **Overdue**: Red badge when past due date
+- **Due soon**: Yellow badge when due within 7 days
+
+These are calculated using the `daysUntilDue()` function from `app/lib/invoice.ts:111`:
+
+```typescript
+export function daysUntilDue(dueDate: string): number {
+  const now = new Date();
+  const due = new Date(dueDate);
+  const diffTime = due.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+}
+```
+
+## Invoice details
+
+Click any invoice to view its complete details including:
+
+- Customer information with full address
+- All line items with quantity and pricing
+- Subtotal, tax breakdown, and total
+- Invoice and due dates
+- Current status with visual indicators
+- Optional notes
+
+### Available actions
+
+From the detail page you can:
+
+- **Edit**: Modify any invoice field
+- **Delete**: Permanently remove the invoice (with confirmation)
+- **Download PDF**: Generate and download a professional PDF (see [PDF export](/features/pdf-export))
+- **Send email**: Email the invoice to your customer (coming soon)
+
+<Info>
+Invoice data is stored in IndexedDB and persists across browser sessions. The data structure is defined in `app/lib/types.ts:29`.
+</Info>
+
+## Data structure
+
+The complete invoice interface:
+
+```typescript
+interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  dueDate: string;
+  status: InvoiceStatus;
+  customer: Customer;
+  items: InvoiceItem[];
+  notes?: string;
+  taxRate?: number;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## Form validation
+
+The invoice form validates:
+
+- **Required fields**: Invoice number, customer name, customer email, at least one line item
+- **Email format**: Valid email address for customer
+- **Numeric values**: Quantity and rate must be positive numbers
+- **Date logic**: Due date should be after invoice date (warning only)
+
+Validation errors display inline below each field with clear error messages.

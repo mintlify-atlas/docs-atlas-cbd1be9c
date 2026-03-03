@@ -1,0 +1,261 @@
+---
+title: Creating invoices
+description: Step-by-step guide to creating professional invoices with Invoice Generator
+---
+
+This guide walks you through the complete process of creating invoices, from filling in basic details to adding line items and managing tax calculations.
+
+## Understanding invoice workflow
+
+The invoice creation process is built around a comprehensive form that captures all necessary information. The form automatically generates unique invoice numbers and provides real-time calculations of totals.
+
+Invoices in the system have four possible statuses (defined in `app/lib/types.ts:27`):
+- `draft` - Invoice is being prepared
+- `sent` - Invoice has been sent to customer
+- `paid` - Payment has been received
+- `cancelled` - Invoice has been cancelled
+
+## Creating a new invoice
+
+<Steps>
+  <Step title="Navigate to invoice creation">
+    Go to `/invoices/create` to access the invoice form. The form will automatically generate a unique invoice number using the format `INV-{timestamp}{random}` (see `app/lib/invoice.ts:100-106`).
+  </Step>
+
+  <Step title="Configure invoice details">
+    The **Invoice Details** card contains:
+
+    - **Invoice Number**: Auto-generated but editable (e.g., `INV-123456789`)
+    - **Currency**: Select from 11 supported currencies (USD, EUR, GBP, CAD, AUD, JPY, CHF, CNY, INR, MXN, NGN)
+    - **Invoice Date**: Defaults to today's date
+    - **Due Date**: Defaults to 30 days from invoice date
+
+    ```typescript
+    // Default date calculation from InvoiceForm.tsx:123-128
+    {
+      invoiceNumber: generateInvoiceNumber(),
+      date: toLocalDateString(new Date()),
+      dueDate: toLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+    }
+    ```
+
+    The currency you select here will be used for all monetary values and totals on the invoice.
+  </Step>
+
+  <Step title="Add customer information">
+    You can either select an existing customer or enter new customer details:
+
+    **Select existing customer:**
+    - Use the "Select Customer" dropdown to choose from saved customers
+    - All customer fields will auto-populate when you select one
+    - Click "Manage customers" to add new customers to the list
+
+    **Enter new customer:**
+    - **Customer Name** (required): Full name or business name
+    - **Email** (required): Customer's email address
+    - **Address**: Street address
+    - **City, State/Province, Zip/Postal Code**: Location details
+    - **Country**: Select from 85+ countries (defaults to United Kingdom)
+
+    <Note>
+      Customer information entered here will be saved with the invoice but won't automatically create a new customer entry. To save customers for reuse, use the Customers page.
+    </Note>
+  </Step>
+
+  <Step title="Add line items">
+    Line items represent the products or services you're billing for. Each item includes:
+
+    - **Description**: What you're charging for (e.g., "Web Design Services")
+    - **Quantity**: Number of units (supports decimals like 2.5)
+    - **Rate**: Price per unit
+    - **Amount**: Automatically calculated as `quantity × rate`
+
+    ```typescript
+    // Line item structure from app/lib/types.ts:18-25
+    interface InvoiceItem {
+      id: string;
+      description: string;
+      quantity: number;
+      rate: number;
+      discount?: number;
+      taxRate?: number;
+    }
+    ```
+
+    **Managing items:**
+    - Click **Add Item** to add more line items
+    - Click **Remove** to delete an item (minimum one item required)
+    - All amounts display in the selected currency with proper formatting
+
+    <Tip>
+      Use descriptive item descriptions to help your customers understand what they're paying for. For example: "Logo Design - 3 concepts with 2 rounds of revisions" instead of just "Design Work".
+    </Tip>
+  </Step>
+
+  <Step title="Configure tax and view totals">
+    The **Tax & Totals** section provides:
+
+    - **Tax Rate (%)**: Enter a percentage (e.g., 20 for 20% VAT)
+    - Tax is calculated on the subtotal after any item-level discounts
+    - Real-time summary showing:
+      - Subtotal
+      - Tax amount
+      - Total amount due
+
+    ```typescript
+    // Tax calculation from app/lib/invoice.ts:11-44
+    export function calculateInvoiceSummary(
+      items: InvoiceItem[],
+      globalTaxRate: number = 0
+    ): InvoiceSummary {
+      // Calculates subtotal, discounts, tax, and final total
+      // Returns: subtotal, itemDiscount, subtotalAfterDiscount, taxAmount, total
+    }
+    ```
+
+    The totals update automatically as you modify items or tax rates.
+  </Step>
+
+  <Step title="Add notes (optional)">
+    The **Notes** field allows you to add:
+    - Payment terms (e.g., "Payment due within 30 days")
+    - Special instructions
+    - Thank you messages
+    - Legal disclaimers
+
+    Notes appear at the bottom of the generated invoice.
+  </Step>
+
+  <Step title="Save the invoice">
+    Click **Create Invoice** to save. The form validates:
+    - Customer name and email are required
+    - Invoice number is unique
+    - At least one line item exists
+
+    ```typescript
+    // Validation from InvoiceForm.tsx:314-323
+    const formErrors = validateInvoiceForm({
+      ...formData,
+      items,
+    });
+
+    if (Object.keys(formErrors).length > 0) {
+      setErrors(formErrors);
+      return;
+    }
+    ```
+
+    The invoice is created with:
+    - Status: `draft`
+    - Created timestamp
+    - Customer snapshot (preserves customer details even if the customer record changes)
+  </Step>
+</Steps>
+
+## Using invoice templates
+
+To speed up invoice creation, you can save frequently used invoice configurations as templates.
+
+### Save current invoice as template
+
+While creating an invoice:
+
+1. Fill in customer information, line items, tax rate, and notes
+2. Click **Save as Template**
+3. Enter a template name (e.g., "Monthly Retainer")
+4. Add an optional description
+5. Click **Save Template**
+
+The template saves:
+- Customer information (partial)
+- All line items with descriptions, quantities, and rates
+- Tax rate
+- Currency
+- Notes
+
+### Use a saved template
+
+Templates are loaded via sessionStorage when you select one from the templates page. The invoice form automatically populates with the template data on load (see `InvoiceForm.tsx:166-206`).
+
+<Warning>
+  Invoice numbers and dates are NOT saved in templates. Each new invoice from a template gets a fresh invoice number and current date.
+</Warning>
+
+## Currency formatting
+
+All monetary values are formatted using the Intl.NumberFormat API based on the selected currency:
+
+```typescript
+// From app/lib/invoice.ts:50-70
+export function formatCurrency(
+  amount: number,
+  currency: string = "USD"
+): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+```
+
+This ensures proper currency symbols and decimal formatting for international invoices.
+
+## Database structure
+
+Invoices are stored with the following schema (from `app/lib/schema.sql:16-30`):
+
+```sql
+CREATE TABLE invoices (
+  id                TEXT NOT NULL PRIMARY KEY,
+  invoice_number    TEXT NOT NULL UNIQUE,
+  date              TEXT NOT NULL,
+  due_date          TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'draft',
+  customer_id       TEXT,
+  customer_snapshot TEXT NOT NULL,  -- JSON snapshot
+  notes             TEXT,
+  tax_rate          REAL,
+  currency          TEXT NOT NULL DEFAULT 'GBP',
+  created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL
+);
+```
+
+Line items are stored separately and linked via foreign key:
+
+```sql
+CREATE TABLE invoice_items (
+  id          TEXT NOT NULL PRIMARY KEY,
+  invoice_id  TEXT NOT NULL,
+  description TEXT NOT NULL,
+  quantity    REAL NOT NULL,
+  rate        REAL NOT NULL,
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+);
+```
+
+## Best practices
+
+<Tip>
+  **Professional invoice numbers**: While the auto-generated format works well, consider customizing your invoice numbers to match your business (e.g., "ACME-2024-001").
+</Tip>
+
+<Tip>
+  **Accurate due dates**: Set realistic payment terms. 30 days is standard for B2B, but adjust based on your customer agreements.
+</Tip>
+
+<Tip>
+  **Detailed line items**: Break down your services into clear, itemized charges. This reduces payment disputes and questions.
+</Tip>
+
+<Warning>
+  Always review the calculated totals before saving. The system calculates automatically, but it's good practice to verify the amounts match your expectations.
+</Warning>
+
+## Next steps
+
+- Learn how to [manage customers](/guides/managing-customers) for faster invoice creation
+- Set up your [company profile](/guides/company-setup) to appear on invoices
+- Configure [payment details](/guides/payment-details) to tell customers how to pay

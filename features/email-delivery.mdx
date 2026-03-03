@@ -1,0 +1,262 @@
+---
+title: Email delivery
+description: Email invoice PDFs directly to customers (coming soon)
+---
+
+## Overview
+
+The email delivery feature will allow you to send invoice PDFs directly to your customers' email addresses from within the application. This feature is currently in development and will be available in a future release.
+
+<Note>
+This feature is **coming soon** and is not yet available. The UI includes a disabled "Send Email" button on invoice detail pages as a preview of this upcoming functionality.
+</Note>
+
+## Planned functionality
+
+When released, the email delivery feature will include:
+
+### Email composition
+
+- **Recipient**: Customer email from invoice (pre-filled)
+- **CC/BCC**: Optional additional recipients
+- **Subject**: Customizable subject line with default template (e.g., "Invoice #INV-123456 from [Company Name]")
+- **Body**: Editable message template with merge fields
+- **Attachment**: Invoice PDF automatically attached
+
+### Email templates
+
+Pre-configured email templates for common scenarios:
+
+- **New invoice**: "Here's your invoice for [services/products]"
+- **Payment reminder**: "Friendly reminder: Invoice #XXX is due on [date]"
+- **Overdue notice**: "Payment overdue for Invoice #XXX"
+- **Payment received**: "Thank you! Payment received for Invoice #XXX"
+
+Templates will support merge fields:
+- `{{invoice_number}}`: Invoice number
+- `{{customer_name}}`: Customer name
+- `{{amount}}`: Total amount with currency
+- `{{due_date}}`: Payment due date
+- `{{company_name}}`: Your company name
+
+### Delivery options
+
+Planned delivery methods:
+
+1. **Direct browser email**: Use `mailto:` links to open default email client
+2. **SMTP integration**: Configure your own email server
+3. **Email service providers**: Integration with:
+   - SendGrid
+   - Mailgun
+   - Amazon SES
+   - Postmark
+
+### Email tracking
+
+Once sent, invoices will track:
+- **Sent date**: When email was sent
+- **Delivery status**: Delivered, bounced, or failed
+- **Open tracking**: Whether customer opened the email (if using service provider)
+- **Click tracking**: Whether customer clicked links (if using service provider)
+
+## Current workaround
+
+Until email delivery is available, you can:
+
+### Option 1: Download and attach manually
+
+1. Click **Download PDF** on the invoice detail page
+2. Open your email client
+3. Compose a new email to your customer
+4. Attach the downloaded PDF
+5. Send
+
+### Option 2: Use browser mailto
+
+While the button is disabled in the UI, you can manually use your browser's `mailto:` functionality:
+
+1. Download the PDF
+2. Note the customer's email from the invoice
+3. Open your email client with: `mailto:customer@example.com?subject=Invoice #INV-123456`
+4. Attach the PDF
+5. Send
+
+## Technical implementation preview
+
+The email feature will be implemented similarly to PDF generation, with a client-side approach:
+
+### Expected code structure
+
+```typescript
+// Future implementation (not yet available)
+export async function sendInvoiceEmail(
+  invoice: Invoice,
+  options: EmailOptions,
+): Promise<EmailResult> {
+  // Generate PDF as blob
+  const pdfBlob = await generateInvoicePDFBlob(invoice);
+  
+  // Prepare email payload
+  const payload = {
+    to: invoice.customer.email,
+    cc: options.cc,
+    bcc: options.bcc,
+    subject: options.subject || `Invoice ${invoice.invoiceNumber}`,
+    body: options.body,
+    attachments: [
+      {
+        filename: `Invoice_${invoice.invoiceNumber}.pdf`,
+        content: pdfBlob,
+        contentType: "application/pdf",
+      },
+    ],
+  };
+  
+  // Send via configured method
+  return await emailProvider.send(payload);
+}
+```
+
+### Expected data structure
+
+```typescript
+interface EmailOptions {
+  to?: string; // Override default customer email
+  cc?: string[];
+  bcc?: string[];
+  subject?: string;
+  body: string;
+  template?: string; // Template ID
+}
+
+interface EmailResult {
+  success: boolean;
+  messageId?: string;
+  sentAt?: string;
+  error?: string;
+}
+
+interface EmailTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  createdAt: string;
+}
+```
+
+## Email service configuration
+
+When released, you'll configure email delivery through Settings:
+
+### SMTP settings
+
+```typescript
+interface SMTPConfig {
+  host: string; // e.g., smtp.gmail.com
+  port: number; // e.g., 587
+  secure: boolean; // Use TLS
+  username: string;
+  password: string;
+  fromEmail: string;
+  fromName: string;
+}
+```
+
+### Service provider settings
+
+```typescript
+interface EmailServiceConfig {
+  provider: "sendgrid" | "mailgun" | "ses" | "postmark";
+  apiKey: string;
+  fromEmail: string;
+  fromName: string;
+  replyTo?: string;
+}
+```
+
+<Warning>
+Email credentials will be stored locally in IndexedDB. For security, consider using app-specific passwords or API keys with limited permissions rather than your main account password.
+</Warning>
+
+## Automatic email triggers
+
+Planned automation features:
+
+### Status-based triggers
+
+- **On status change to "sent"**: Automatically email invoice to customer
+- **On status change to "paid"**: Send payment confirmation
+- **On status change to "cancelled"**: Send cancellation notice
+
+### Time-based triggers
+
+- **X days before due date**: Send payment reminder
+- **On due date**: Send "payment due today" notice
+- **X days after due date**: Send overdue notice
+- **Weekly**: Send overdue reminder for unpaid invoices
+
+### Configuration
+
+```typescript
+interface EmailAutomation {
+  enabled: boolean;
+  triggers: {
+    onSent: boolean;
+    onPaid: boolean;
+    reminderDaysBefore: number; // e.g., 3 days before due
+    overdueReminderDays: number; // e.g., 7 days after due
+  };
+  templates: {
+    newInvoice: string; // Template ID
+    reminder: string;
+    overdue: string;
+    paid: string;
+  };
+}
+```
+
+## Privacy and security considerations
+
+When implemented, the email feature will:
+
+- **Never store passwords in plain text**: Encrypted before storage
+- **Support OAuth**: For Gmail, Outlook, and other providers
+- **Allow local-only mode**: Use `mailto:` without external services
+- **Respect data privacy**: No invoice data sent to third parties unless you configure it
+
+## Expected release
+
+The email delivery feature is planned for a future release. Progress can be tracked:
+
+- Current status: **In Development**
+- Expected timeline: **Q2 2026**
+- Priority: **High**
+
+<Info>
+To be notified when email delivery is released, watch the project repository or check the changelog regularly.
+</Info>
+
+## Feature requests
+
+If you have specific requirements for email delivery, such as:
+- Integration with a specific email service
+- Custom email template requirements
+- Bulk email capabilities
+- Advanced automation rules
+
+Please open a feature request in the project repository to share your use case.
+
+## Current UI indicator
+
+On invoice detail pages, the email button shows:
+
+```tsx
+<Button variant="secondary" disabled>
+  <Mail className="h-4 w-4" />
+  Send Email{" "}
+  <span className="text-xs text-(--muted)">(Coming Soon)</span>
+</Button>
+```
+
+This serves as a reminder that the feature is planned and coming soon.

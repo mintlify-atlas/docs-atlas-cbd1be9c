@@ -1,0 +1,509 @@
+---
+title: Invoices
+description: Create, retrieve, update, and delete invoices
+---
+
+## List all invoices
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://your-domain.com/api/invoices \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const response = await fetch('/api/invoices', {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Information about the endpoint status
+</ResponseField>
+
+<ResponseField name="note" type="string">
+  Additional implementation notes
+</ResponseField>
+
+```json Response example
+{
+  "message": "This endpoint would fetch invoices from a database",
+  "note": "Currently using localStorage on the client side"
+}
+```
+
+### Errors
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+```json 500 - Internal server error
+{
+  "error": "Failed to fetch invoices"
+}
+```
+
+## Create an invoice
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://your-domain.com/api/invoices \
+  -H "Content-Type: application/json" \
+  -d '{
+    "invoiceNumber": "INV-001",
+    "date": "2026-03-03",
+    "dueDate": "2026-03-17",
+    "status": "draft",
+    "customer": {
+      "id": "cust_123",
+      "name": "Acme Corp",
+      "email": "billing@acme.com",
+      "address": "123 Main St",
+      "city": "New York",
+      "state": "NY",
+      "zipCode": "10001",
+      "country": "USA"
+    },
+    "items": [
+      {
+        "id": "item_1",
+        "description": "Web Development Services",
+        "quantity": 40,
+        "rate": 150,
+        "taxRate": 10
+      }
+    ],
+    "currency": "USD",
+    "notes": "Payment due within 14 days"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/invoices', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    invoiceNumber: 'INV-001',
+    date: '2026-03-03',
+    dueDate: '2026-03-17',
+    status: 'draft',
+    customer: {
+      id: 'cust_123',
+      name: 'Acme Corp',
+      email: 'billing@acme.com',
+      address: '123 Main St',
+      city: 'New York',
+      state: 'NY',
+      zipCode: '10001',
+      country: 'USA'
+    },
+    items: [
+      {
+        id: 'item_1',
+        description: 'Web Development Services',
+        quantity: 40,
+        rate: 150,
+        taxRate: 10
+      }
+    ],
+    currency: 'USD',
+    notes: 'Payment due within 14 days'
+  })
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Body parameters
+
+<ParamField body="invoiceNumber" type="string" required>
+  Unique invoice number identifier
+</ParamField>
+
+<ParamField body="date" type="string" required>
+  Invoice creation date in ISO 8601 format
+</ParamField>
+
+<ParamField body="dueDate" type="string" required>
+  Payment due date in ISO 8601 format
+</ParamField>
+
+<ParamField body="status" type="string" required>
+  Invoice status. One of: `draft`, `sent`, `paid`, `cancelled`
+</ParamField>
+
+<ParamField body="customer" type="object" required>
+  Customer information object
+  
+  <ParamField body="id" type="string" required>
+    Unique customer identifier
+  </ParamField>
+  
+  <ParamField body="name" type="string" required>
+    Customer name
+  </ParamField>
+  
+  <ParamField body="email" type="string" required>
+    Customer email address
+  </ParamField>
+  
+  <ParamField body="address" type="string" required>
+    Street address
+  </ParamField>
+  
+  <ParamField body="city" type="string" required>
+    City
+  </ParamField>
+  
+  <ParamField body="state" type="string" required>
+    State or province
+  </ParamField>
+  
+  <ParamField body="zipCode" type="string" required>
+    Postal code
+  </ParamField>
+  
+  <ParamField body="country" type="string" required>
+    Country
+  </ParamField>
+  
+  <ParamField body="logo" type="string">
+    Customer logo URL
+  </ParamField>
+</ParamField>
+
+<ParamField body="items" type="array" required>
+  Array of invoice line items
+  
+  <ParamField body="id" type="string" required>
+    Unique item identifier
+  </ParamField>
+  
+  <ParamField body="description" type="string" required>
+    Item or service description
+  </ParamField>
+  
+  <ParamField body="quantity" type="number" required>
+    Quantity of items
+  </ParamField>
+  
+  <ParamField body="rate" type="number" required>
+    Price per unit
+  </ParamField>
+  
+  <ParamField body="discount" type="number">
+    Discount percentage (0-100)
+  </ParamField>
+  
+  <ParamField body="taxRate" type="number">
+    Tax rate percentage (0-100)
+  </ParamField>
+</ParamField>
+
+<ParamField body="currency" type="string" required>
+  Three-letter ISO currency code (e.g., USD, EUR, GBP)
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Additional notes or payment terms
+</ParamField>
+
+<ParamField body="taxRate" type="number">
+  Global tax rate percentage (0-100)
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="invoice" type="object">
+  The created invoice object with all submitted fields
+</ResponseField>
+
+```json 201 - Invoice created successfully
+{
+  "message": "Invoice created successfully",
+  "invoice": {
+    "invoiceNumber": "INV-001",
+    "date": "2026-03-03",
+    "dueDate": "2026-03-17",
+    "status": "draft",
+    "customer": {
+      "id": "cust_123",
+      "name": "Acme Corp",
+      "email": "billing@acme.com",
+      "address": "123 Main St",
+      "city": "New York",
+      "state": "NY",
+      "zipCode": "10001",
+      "country": "USA"
+    },
+    "items": [
+      {
+        "id": "item_1",
+        "description": "Web Development Services",
+        "quantity": 40,
+        "rate": 150,
+        "taxRate": 10
+      }
+    ],
+    "currency": "USD",
+    "notes": "Payment due within 14 days"
+  }
+}
+```
+
+### Errors
+
+```json 400 - Missing required fields
+{
+  "error": "Missing required fields"
+}
+```
+
+```json 500 - Internal server error
+{
+  "error": "Failed to create invoice"
+}
+```
+
+## Get an invoice
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://your-domain.com/api/invoices/inv_123 \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const response = await fetch('/api/invoices/inv_123', {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the invoice to retrieve
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Information about the endpoint status
+</ResponseField>
+
+<ResponseField name="invoiceId" type="string">
+  The requested invoice ID
+</ResponseField>
+
+```json Response example
+{
+  "message": "This endpoint would fetch a specific invoice from a database",
+  "invoiceId": "inv_123"
+}
+```
+
+### Errors
+
+```json 400 - Invoice ID required
+{
+  "error": "Invoice ID is required"
+}
+```
+
+```json 500 - Internal server error
+{
+  "error": "Failed to fetch invoice"
+}
+```
+
+## Update an invoice
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://your-domain.com/api/invoices/inv_123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "sent",
+    "notes": "Updated payment terms"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/invoices/inv_123', {
+  method: 'PATCH',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    status: 'sent',
+    notes: 'Updated payment terms'
+  })
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the invoice to update
+</ParamField>
+
+### Body parameters
+
+All fields are optional. Only include the fields you want to update.
+
+<ParamField body="invoiceNumber" type="string">
+  Unique invoice number identifier
+</ParamField>
+
+<ParamField body="date" type="string">
+  Invoice creation date in ISO 8601 format
+</ParamField>
+
+<ParamField body="dueDate" type="string">
+  Payment due date in ISO 8601 format
+</ParamField>
+
+<ParamField body="status" type="string">
+  Invoice status. One of: `draft`, `sent`, `paid`, `cancelled`
+</ParamField>
+
+<ParamField body="customer" type="object">
+  Customer information object (partial updates supported)
+</ParamField>
+
+<ParamField body="items" type="array">
+  Array of invoice line items (replaces existing items)
+</ParamField>
+
+<ParamField body="currency" type="string">
+  Three-letter ISO currency code
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Additional notes or payment terms
+</ParamField>
+
+<ParamField body="taxRate" type="number">
+  Global tax rate percentage (0-100)
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="invoiceId" type="string">
+  The updated invoice ID
+</ResponseField>
+
+<ResponseField name="updates" type="object">
+  The fields that were updated
+</ResponseField>
+
+```json Response example
+{
+  "message": "Invoice updated successfully",
+  "invoiceId": "inv_123",
+  "updates": {
+    "status": "sent",
+    "notes": "Updated payment terms"
+  }
+}
+```
+
+### Errors
+
+```json 400 - Invoice ID required
+{
+  "error": "Invoice ID is required"
+}
+```
+
+```json 500 - Internal server error
+{
+  "error": "Failed to update invoice"
+}
+```
+
+## Delete an invoice
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://your-domain.com/api/invoices/inv_123 \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const response = await fetch('/api/invoices/inv_123', {
+  method: 'DELETE',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+const data = await response.json();
+```
+</CodeGroup>
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the invoice to delete
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="invoiceId" type="string">
+  The deleted invoice ID
+</ResponseField>
+
+```json Response example
+{
+  "message": "Invoice deleted successfully",
+  "invoiceId": "inv_123"
+}
+```
+
+### Errors
+
+```json 400 - Invoice ID required
+{
+  "error": "Invoice ID is required"
+}
+```
+
+```json 500 - Internal server error
+{
+  "error": "Failed to delete invoice"
+}
+```

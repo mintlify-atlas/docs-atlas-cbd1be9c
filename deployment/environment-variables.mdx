@@ -1,0 +1,361 @@
+---
+title: Environment variables
+description: Complete reference for all environment variables required to deploy Invoice Generator
+---
+
+Invoice Generator requires several environment variables for database connectivity, authentication, and application configuration. This guide provides a complete reference.
+
+## Required variables
+
+These variables must be set for the application to function:
+
+### Database configuration
+
+<ParamField path="TURSO_DATABASE_URL" type="string" required>
+  Your Turso database connection URL.
+  
+  **Format**: `libsql://[database-name]-[org].turso.io`
+  
+  **Example**: `libsql://invoice-generator-myorg.turso.io`
+  
+  **Used in**:
+  - `app/lib/turso.ts:4` - Database client initialization
+  - `scripts/migrate.mjs:20` - Migration script
+  
+  **How to get**:
+  ```bash
+  turso db show <database-name>
+  ```
+</ParamField>
+
+<ParamField path="TURSO_AUTH_TOKEN" type="string" required>
+  Authentication token for Turso database access.
+  
+  **Format**: Long base64-encoded string
+  
+  **Used in**:
+  - `app/lib/turso.ts:5` - Database client authentication
+  - `scripts/migrate.mjs:21` - Migration authentication
+  
+  **How to get**:
+  ```bash
+  turso db tokens create <database-name>
+  ```
+  
+  <Note>
+  Optional for local development with `file:` URLs, but **required for production** with remote Turso databases.
+  </Note>
+</ParamField>
+
+### Authentication configuration
+
+<ParamField path="AUTH_SECRET" type="string" required>
+  Secret key used by NextAuth.js to encrypt tokens and session data.
+  
+  **Format**: Random base64 string (minimum 32 characters)
+  
+  **Used in**: NextAuth.js session encryption and JWT signing
+  
+  **How to generate**:
+  ```bash
+  openssl rand -base64 32
+  ```
+  
+  **Example output**: `a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6`
+  
+  <Warning>
+  Never share or commit this value. Treat it like a password. If compromised, generate a new one immediately (will invalidate existing sessions).
+  </Warning>
+</ParamField>
+
+<ParamField path="GOOGLE_CLIENT_ID" type="string" required>
+  OAuth 2.0 Client ID from Google Cloud Console.
+  
+  **Format**: `[random-string].apps.googleusercontent.com`
+  
+  **Example**: `123456789-abc123.apps.googleusercontent.com`
+  
+  **Used in**:
+  - `auth.ts:14` - Google provider configuration
+  - `auth.config.ts:17` - Edge-compatible auth config
+  
+  **How to get**:
+  1. Go to [Google Cloud Console](https://console.cloud.google.com)
+  2. Navigate to **APIs & Services** > **Credentials**
+  3. Click **Create Credentials** > **OAuth client ID**
+  4. Select **Web application**
+  5. Add authorized redirect URIs (see below)
+  6. Copy the Client ID
+</ParamField>
+
+<ParamField path="GOOGLE_CLIENT_SECRET" type="string" required>
+  OAuth 2.0 Client Secret from Google Cloud Console.
+  
+  **Format**: Random alphanumeric string
+  
+  **Used in**:
+  - `auth.ts:15` - Google provider configuration
+  - `auth.config.ts:18` - Edge-compatible auth config
+  
+  **Security**: Keep this secret. Never expose in client-side code or commit to version control.
+</ParamField>
+
+## Google OAuth redirect URIs
+
+Add these authorized redirect URIs in Google Cloud Console based on your deployment:
+
+**Local development**:
+```
+http://localhost:3000/api/auth/callback/google
+```
+
+**Vercel deployment**:
+```
+https://your-project.vercel.app/api/auth/callback/google
+```
+
+**Custom domain**:
+```
+https://your-domain.com/api/auth/callback/google
+```
+
+<Note>
+The redirect URI must match **exactly**, including the protocol (`http` vs `https`) and domain.
+</Note>
+
+## Environment file setup
+
+### Development (.env.local)
+
+Create `.env.local` for local development:
+
+```bash
+# Database
+TURSO_DATABASE_URL=libsql://invoice-generator-dev.turso.io
+TURSO_AUTH_TOKEN=your-dev-token
+
+# Authentication
+AUTH_SECRET=your-generated-secret-for-dev
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+### Production (.env.production)
+
+Create `.env.production` for production deployment:
+
+```bash
+# Database
+TURSO_DATABASE_URL=libsql://invoice-generator-prod.turso.io
+TURSO_AUTH_TOKEN=your-prod-token
+
+# Authentication
+AUTH_SECRET=your-generated-secret-for-prod
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+<Warning>
+Never commit `.env.local` or `.env.production` to version control. Add them to `.gitignore`.
+</Warning>
+
+## Platform-specific configuration
+
+### Vercel
+
+Add environment variables in Vercel dashboard:
+
+1. Navigate to your project
+2. Go to **Settings** > **Environment Variables**
+3. Add each variable with appropriate environment (Production, Preview, Development)
+4. Redeploy for changes to take effect
+
+**Tip**: Use different database URLs for production and preview environments:
+- Production: `TURSO_DATABASE_URL=libsql://prod.turso.io`
+- Preview: `TURSO_DATABASE_URL=libsql://preview.turso.io`
+
+### Docker
+
+Pass environment variables to Docker:
+
+**Using --env-file**:
+```bash
+docker run --env-file .env.production invoice-generator
+```
+
+**Using -e flags**:
+```bash
+docker run \
+  -e TURSO_DATABASE_URL=libsql://... \
+  -e TURSO_AUTH_TOKEN=... \
+  -e AUTH_SECRET=... \
+  -e GOOGLE_CLIENT_ID=... \
+  -e GOOGLE_CLIENT_SECRET=... \
+  invoice-generator
+```
+
+**Docker Compose**:
+```yaml
+services:
+  app:
+    image: invoice-generator
+    env_file:
+      - .env.production
+    # Or specify directly:
+    environment:
+      - TURSO_DATABASE_URL=${TURSO_DATABASE_URL}
+      - TURSO_AUTH_TOKEN=${TURSO_AUTH_TOKEN}
+```
+
+### Node.js (systemd)
+
+For systemd services, use `EnvironmentFile`:
+
+```ini
+[Service]
+EnvironmentFile=/var/www/invoice-generator/.env.production
+ExecStart=/usr/bin/node server.js
+```
+
+Or specify directly:
+
+```ini
+[Service]
+Environment="TURSO_DATABASE_URL=libsql://..."
+Environment="TURSO_AUTH_TOKEN=..."
+Environment="AUTH_SECRET=..."
+```
+
+### PM2
+
+With PM2, use `env_file` in `ecosystem.config.js`:
+
+```javascript
+module.exports = {
+  apps: [{
+    name: 'invoice-generator',
+    script: 'node_modules/next/dist/bin/next',
+    args: 'start',
+    env_file: '.env.production',
+  }],
+};
+```
+
+## Variable validation
+
+The application validates required environment variables at startup:
+
+**Database URL check** (`scripts/migrate.mjs:14-17`):
+```javascript
+if (!process.env.TURSO_DATABASE_URL) {
+  console.error("Error: TURSO_DATABASE_URL is not set.");
+  process.exit(1);
+}
+```
+
+If you see errors about missing variables, check:
+1. Variable names are spelled correctly
+2. `.env` file is in the correct location
+3. Environment file is loaded (use `--env-file` flag if needed)
+
+## Security best practices
+
+<Steps>
+  <Step title="Use secret managers">
+    For production, use platform-specific secret managers:
+    
+    - **Vercel**: Built-in environment variables
+    - **AWS**: AWS Secrets Manager or Parameter Store
+    - **GCP**: Secret Manager
+    - **Azure**: Key Vault
+  </Step>
+  
+  <Step title="Rotate credentials regularly">
+    ```bash
+    # Rotate Turso token
+    turso db tokens create <database-name>
+    
+    # Rotate AUTH_SECRET
+    openssl rand -base64 32
+    
+    # Rotate Google OAuth credentials in Cloud Console
+    ```
+  </Step>
+  
+  <Step title="Limit access">
+    - Restrict who can view production environment variables
+    - Use separate credentials for development and production
+    - Never log or expose secrets in application code
+  </Step>
+  
+  <Step title="Audit regularly">
+    - Review who has access to secrets
+    - Check for any exposed credentials in logs or error messages
+    - Monitor for unauthorized access attempts
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Variables not loading
+
+**Symptom**: Application throws errors about undefined environment variables
+
+**Solutions**:
+1. Verify `.env` file exists in project root
+2. Check file is named correctly (`.env.local` for dev, `.env.production` for prod)
+3. Use `--env-file` flag explicitly:
+   ```bash
+   node --env-file=.env.production scripts/migrate.mjs
+   ```
+4. Ensure no trailing spaces or quotes in values
+
+### Authentication failures
+
+**Symptom**: OAuth login doesn't work or shows errors
+
+**Check**:
+1. `AUTH_SECRET` is set and not empty
+2. `GOOGLE_CLIENT_ID` matches the one in Google Cloud Console
+3. `GOOGLE_CLIENT_SECRET` is correct
+4. Redirect URI in Google Console matches your deployment URL exactly
+
+### Database connection errors
+
+**Symptom**: Can't connect to database or migrations fail
+
+**Verify**:
+1. `TURSO_DATABASE_URL` format is correct (starts with `libsql://`)
+2. `TURSO_AUTH_TOKEN` is valid and not expired
+3. Database exists:
+   ```bash
+   turso db list
+   turso db show <database-name>
+   ```
+4. Network can reach Turso endpoints (check firewall)
+
+## Environment variable reference table
+
+| Variable | Required | Used In | Purpose |
+|----------|----------|---------|----------|
+| `TURSO_DATABASE_URL` | Yes | `app/lib/turso.ts:4`, `scripts/migrate.mjs:20` | Database connection URL |
+| `TURSO_AUTH_TOKEN` | Yes* | `app/lib/turso.ts:5`, `scripts/migrate.mjs:21` | Database authentication |
+| `AUTH_SECRET` | Yes | NextAuth.js | Session encryption |
+| `GOOGLE_CLIENT_ID` | Yes | `auth.ts:14`, `auth.config.ts:17` | OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Yes | `auth.ts:15`, `auth.config.ts:18` | OAuth secret |
+
+*Optional for local `file:` URLs, required for remote databases
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Deploy to Vercel" icon="rocket" href="/deployment/vercel">
+    Quick deployment with environment variables
+  </Card>
+  <Card title="Self-hosted deployment" icon="server" href="/deployment/self-hosted">
+    Configure environment for self-hosting
+  </Card>
+  <Card title="Deployment overview" icon="book" href="/deployment/overview">
+    Back to deployment overview
+  </Card>
+</CardGroup>

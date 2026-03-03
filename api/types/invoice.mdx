@@ -1,0 +1,190 @@
+---
+title: Invoice and InvoiceItem
+description: Core invoice and line item types for creating and managing invoices
+---
+
+## Invoice
+
+The `Invoice` interface represents a complete invoice document with customer information, line items, and metadata.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the invoice
+</ResponseField>
+
+<ResponseField name="invoiceNumber" type="string" required>
+  Human-readable invoice number (e.g., "INV-001")
+</ResponseField>
+
+<ResponseField name="date" type="string" required>
+  Invoice issue date in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="dueDate" type="string" required>
+  Payment due date in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="status" type="InvoiceStatus" required>
+  Current status of the invoice. One of:
+  - `draft` - Invoice is being prepared
+  - `sent` - Invoice has been sent to customer
+  - `paid` - Payment has been received
+  - `cancelled` - Invoice has been cancelled
+</ResponseField>
+
+<ResponseField name="customer" type="Customer" required>
+  <Expandable title="Customer object">
+    Customer information for this invoice. See [Customer](/api/types/customer) for full details.
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="items" type="InvoiceItem[]" required>
+  <Expandable title="Array of invoice items">
+    Line items included in this invoice. See [InvoiceItem](#invoiceitem) below for field details.
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  Optional notes or terms to display on the invoice
+</ResponseField>
+
+<ResponseField name="taxRate" type="number">
+  Optional global tax rate as a percentage (e.g., 10 for 10%)
+</ResponseField>
+
+<ResponseField name="currency" type="string" required>
+  Three-letter ISO 4217 currency code (e.g., "USD", "EUR", "GBP")
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  Timestamp when the invoice was created in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  Timestamp when the invoice was last updated in ISO 8601 format
+</ResponseField>
+
+### TypeScript definition
+
+```typescript
+export type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  dueDate: string;
+  status: InvoiceStatus;
+  customer: Customer;
+  items: InvoiceItem[];
+  notes?: string;
+  taxRate?: number;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### Example
+
+```typescript
+const invoice: Invoice = {
+  id: "inv_123",
+  invoiceNumber: "INV-2026-001",
+  date: "2026-03-03T00:00:00Z",
+  dueDate: "2026-04-03T00:00:00Z",
+  status: "sent",
+  customer: {
+    id: "cust_456",
+    name: "Acme Corporation",
+    email: "billing@acme.com",
+    address: "123 Business St",
+    city: "San Francisco",
+    state: "CA",
+    zipCode: "94105",
+    country: "United States"
+  },
+  items: [
+    {
+      id: "item_1",
+      description: "Web Development Services",
+      quantity: 40,
+      rate: 150,
+      taxRate: 10
+    },
+    {
+      id: "item_2",
+      description: "Design Consultation",
+      quantity: 8,
+      rate: 200,
+      discount: 5
+    }
+  ],
+  notes: "Payment due within 30 days. Thank you for your business!",
+  currency: "USD",
+  createdAt: "2026-03-03T10:00:00Z",
+  updatedAt: "2026-03-03T10:00:00Z"
+};
+```
+
+## InvoiceItem
+
+The `InvoiceItem` interface represents a single line item on an invoice.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the line item
+</ResponseField>
+
+<ResponseField name="description" type="string" required>
+  Description of the product or service
+</ResponseField>
+
+<ResponseField name="quantity" type="number" required>
+  Quantity of items or hours worked
+</ResponseField>
+
+<ResponseField name="rate" type="number" required>
+  Price per unit in the invoice's currency
+</ResponseField>
+
+<ResponseField name="discount" type="number">
+  Optional discount percentage (e.g., 5 for 5% off)
+</ResponseField>
+
+<ResponseField name="taxRate" type="number">
+  Optional tax rate specific to this item as a percentage (e.g., 10 for 10%)
+</ResponseField>
+
+### TypeScript definition
+
+```typescript
+export interface InvoiceItem {
+  id: string;
+  description: string;
+  quantity: number;
+  rate: number;
+  discount?: number;
+  taxRate?: number;
+}
+```
+
+### Example
+
+```typescript
+const item: InvoiceItem = {
+  id: "item_789",
+  description: "Premium Support Package",
+  quantity: 1,
+  rate: 999,
+  discount: 10,
+  taxRate: 8.5
+};
+```
+
+### Calculations
+
+Line item calculations are performed as follows:
+
+1. **Line total** = `quantity × rate`
+2. **After discount** = Line total × (1 - `discount` / 100)
+3. **Tax amount** = After discount × (`taxRate` / 100)
+4. **Final amount** = After discount + Tax amount
